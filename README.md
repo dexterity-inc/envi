@@ -60,7 +60,7 @@ You have two options to set your GitHub token:
 envi config --token your_github_personal_access_token
 ```
 
-This will save your token in `~/.envi/config.json` and use it for all future commands.
+This will save your token in your system's secure credential store.
 
 2. Using an environment variable (temporary):
 
@@ -69,6 +69,41 @@ export GITHUB_TOKEN=your_github_personal_access_token
 ```
 
 In both cases, you'll need a GitHub token with the `gist` scope.
+
+## Security Features
+
+Envi includes several security features to protect your sensitive data:
+
+### Secure Token Storage
+
+Your GitHub token is stored in your system's secure credential manager:
+
+- macOS: Keychain
+- Linux: Secret Service API/libsecret
+- Windows: Windows Credential Manager
+
+This provides much better security than storing tokens in plaintext files.
+
+### Token Protection
+
+- Your token is never displayed in full in terminal output
+- If secure credential storage isn't available, a fallback mechanism stores tokens with proper file permissions (0600)
+- Token removal command (`envi config --clear-token`) ensures tokens can be completely removed from storage
+
+### File Handling
+
+- Proper file permissions (0600) ensure only the file owner can read or write the configuration
+- Automatic backup creation for critical operations (merge, pull) allows recovery if needed
+
+### Gist Security
+
+Remember that private Gists:
+
+- Are not visible in public listings
+- Are not truly private - anyone with the URL can access them
+- Should not be used for highly sensitive information
+
+For highly sensitive environments, consider using a dedicated secrets management service.
 
 ## Command Reference
 
@@ -268,6 +303,7 @@ envi config
 
 - `--token`, `-t` [string]: Set your GitHub personal access token
 - `--clear-gist`, `-c` [boolean]: Clear the saved Gist ID (default: false)
+- `--clear-token` [boolean]: Remove the GitHub token from secure storage (default: false)
 
 **Examples**:
 
@@ -280,13 +316,17 @@ envi config --token=your_github_personal_access_token
 
 # Clear saved Gist ID
 envi config --clear-gist
+
+# Remove stored GitHub token
+envi config --clear-token
 ```
 
 **Output**:
 
-- GitHub token status (partially masked for security)
+- GitHub token status (securely stored or partially masked)
 - Default Gist ID (if set)
 - Usage examples for the saved Gist ID
+- Security information about token storage
 
 ## Command Help
 
