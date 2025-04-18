@@ -9,13 +9,13 @@ A simple CLI tool to push and pull `.env` files to/from GitHub Gists for secure 
 #### Using Homebrew (Recommended)
 
 ```bash
-brew tap yourusername/tap
+brew tap dexterity-inc/tap
 brew install envi
 ```
 
 #### Manual Installation
 
-1. Download the latest binary from the [Releases page](https://github.com/yourusername/envi/releases)
+1. Download the latest binary from the [Releases page](https://github.com/dexterity-inc/envi/releases)
 2. Make it executable: `chmod +x envi`
 3. Move it to your PATH: `sudo mv envi /usr/local/bin/`
 
@@ -29,7 +29,7 @@ Windows installation options are in progress:
 
 For now, Windows users can:
 
-1. Download the latest Windows binary from the [Releases page](https://github.com/yourusername/envi/releases)
+1. Download the latest Windows binary from the [Releases page](https://github.com/dexterity-inc/envi/releases)
 2. Add the executable to your PATH
 
 ### Building from Source
@@ -38,7 +38,7 @@ If you prefer to build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/envi.git
+git clone https://github.com/dexterity-inc/envi.git
 cd envi
 
 # Build the binary
