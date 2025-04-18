@@ -4,17 +4,47 @@ A simple CLI tool to push and pull `.env` files to/from GitHub Gists for secure 
 
 ## Installation
 
-1. Make sure you have Go installed
-2. Clone this repository
-3. Build the binary:
+### macOS and Linux
+
+#### Using Homebrew (Recommended)
 
 ```bash
-go build -o envi
+brew tap yourusername/tap
+brew install envi
 ```
 
-4. Move the binary to your PATH (optional):
+#### Manual Installation
+
+1. Download the latest binary from the [Releases page](https://github.com/yourusername/envi/releases)
+2. Make it executable: `chmod +x envi`
+3. Move it to your PATH: `sudo mv envi /usr/local/bin/`
+
+### Windows (Coming Soon)
+
+Windows installation options are in progress:
+
+- Scoop package
+- Chocolatey package
+- MSI installer
+
+For now, Windows users can:
+
+1. Download the latest Windows binary from the [Releases page](https://github.com/yourusername/envi/releases)
+2. Add the executable to your PATH
+
+### Building from Source
+
+If you prefer to build from source:
 
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/envi.git
+cd envi
+
+# Build the binary
+go build -o envi
+
+# Optional: Move to PATH
 sudo mv envi /usr/local/bin/
 ```
 
