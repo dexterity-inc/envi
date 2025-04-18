@@ -18,6 +18,12 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
+	// First, ensure all commands are added to rootCmd from their respective init functions
+	
+	// Then, initialize all flags after all commands are registered
+	initEncryptionFlags()  // Initialize encryption flags for push and pull commands
+	initConfigFlags()      // Initialize config command flags
+	
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)

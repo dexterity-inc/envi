@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v37/github"
@@ -12,15 +13,21 @@ import (
 )
 
 var (
-	pullGistID    string
-	backupFlag    bool
+	// Flag to specify which Gist to pull from
+	pullGistID string
+	
+	// Flag to force overwrite of existing .env file
 	forceOverwrite bool
+	
+	// Flag to create a backup of the existing .env file
+	backupFlag bool
 )
 
 func init() {
-	pullCmd.Flags().StringVarP(&pullGistID, "id", "i", "", "GitHub Gist ID to pull from (if not specified, uses the saved ID)")
-	pullCmd.Flags().BoolVarP(&backupFlag, "backup", "b", false, "Create a backup of the existing .env file before overwriting")
-	pullCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "Force overwrite without confirmation if .env file exists")
+	pullCmd.Flags().StringVarP(&pullGistID, "id", "i", "", "GitHub Gist ID to pull from")
+	pullCmd.Flags().BoolVarP(&forceOverwrite, "force", "f", false, "Force overwrite of existing .env file")
+	pullCmd.Flags().BoolVarP(&backupFlag, "backup", "b", true, "Create a backup of existing .env file (default: true)")
+	// Encryption flags now defined in encryption.go
 	rootCmd.AddCommand(pullCmd)
 }
 
@@ -29,6 +36,34 @@ var pullCmd = &cobra.Command{
 	Short: "Pull .env file from GitHub Gist",
 	Long:  `Pull .env file from a GitHub Gist and save it to the current directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Load config for encryption settings and last used Gist ID
+		config, err := LoadConfig()
+		if err != nil {
+			fmt.Printf("Error loading config: %s\n", err)
+			os.Exit(1)
+		}
+		
+		// Apply default encryption settings if not explicitly set by flags
+		if !cmd.Flags().Changed("decrypt") && !cmd.Flags().Changed("unmask") && config.EncryptByDefault {
+			if config.UseMaskedEncryption {
+				useMaskedEncryption = true
+				fmt.Println("Using default setting: Unmasking enabled")
+			} else {
+				useEncryption = true
+				fmt.Println("Using default setting: Decryption enabled")
+			}
+		}
+		
+		if !cmd.Flags().Changed("use-key-file") && config.UseKeyFileByDefault {
+			useKeyFile = true
+			fmt.Println("Using default setting: Using key file for decryption")
+		}
+		
+		if !cmd.Flags().Changed("key-file") && config.DefaultKeyFile != "" {
+			encryptionKeyFile = config.DefaultKeyFile
+			fmt.Printf("Using default key file: %s\n", encryptionKeyFile)
+		}
+		
 		// Check if .env exists and handle backups/confirmations
 		if _, err := os.Stat(".env"); err == nil {
 			if backupFlag {
@@ -63,12 +98,6 @@ var pullCmd = &cobra.Command{
 		
 		// If no Gist ID provided, check config for last used ID
 		if pullGistID == "" {
-			config, err := LoadConfig()
-			if err != nil {
-				fmt.Printf("Error loading config: %s\n", err)
-				os.Exit(1)
-			}
-			
 			if config.LastGistID == "" {
 				fmt.Println("Error: No Gist ID specified and no saved Gist ID found")
 				fmt.Println("Use 'envi pull --id GIST_ID' or first push an .env file with 'envi push'")
@@ -124,6 +153,98 @@ var pullCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Check if content is encrypted or masked
+		isEncrypted := strings.HasPrefix(envContent, "ENVI_ENCRYPTED_V1")
+		isMasked := strings.Contains(envContent, "# ENVI_MASKED_ENCRYPTION_V1")
+		
+		// Auto-detect encryption type and use appropriate flag
+		if isEncrypted && isMasked {
+			fmt.Println("Warning: Content appears to be both fully encrypted and masked. This is unexpected.")
+			fmt.Println("Will attempt full decryption first.")
+			isEncrypted = true
+			isMasked = false
+		} else if isEncrypted {
+			fmt.Println("Detected fully encrypted .env file")
+			
+			if !useEncryption && !useMaskedEncryption {
+				fmt.Print("The .env file is encrypted. Decrypt it? (y/n): ")
+				var response string
+				fmt.Scanln(&response)
+				if response == "y" || response == "Y" {
+					useEncryption = true
+				} else {
+					fmt.Println("Warning: Writing encrypted content to .env file without decryption.")
+				}
+			} else if useMaskedEncryption {
+				fmt.Println("Warning: Content is fully encrypted but --unmask flag was specified.")
+				fmt.Print("Switch to full decryption instead? (y/n): ")
+				var response string
+				fmt.Scanln(&response)
+				if response == "y" || response == "Y" {
+					useEncryption = true
+					useMaskedEncryption = false
+				} else {
+					fmt.Println("Will attempt to unmask anyway, but this will likely fail.")
+				}
+			}
+		} else if isMasked {
+			fmt.Println("Detected masked .env file (values are encrypted but variable names visible)")
+			
+			if !useEncryption && !useMaskedEncryption {
+				fmt.Print("The .env file has masked values. Unmask them? (y/n): ")
+				var response string
+				fmt.Scanln(&response)
+				if response == "y" || response == "Y" {
+					useMaskedEncryption = true
+				} else {
+					fmt.Println("Warning: Writing masked content to .env file without unmasking.")
+				}
+			} else if useEncryption {
+				fmt.Println("Warning: Content has masked values but --decrypt flag was specified.")
+				fmt.Print("Switch to unmasking instead? (y/n): ")
+				var response string
+				fmt.Scanln(&response)
+				if response == "y" || response == "Y" {
+					useEncryption = false
+					useMaskedEncryption = true
+				} else {
+					fmt.Println("Will attempt to decrypt anyway, but this will likely fail.")
+				}
+			}
+		} else if useEncryption || useMaskedEncryption {
+			fmt.Println("Warning: --decrypt or --unmask flag specified but the content doesn't appear to be encrypted.")
+			fmt.Print("Continue anyway? (y/n): ")
+			var response string
+			fmt.Scanln(&response)
+			if response != "y" && response != "Y" {
+				fmt.Println("Pull canceled")
+				return
+			}
+			useEncryption = false
+			useMaskedEncryption = false
+		}
+		
+		// Process content based on encryption type
+		if isEncrypted && useEncryption {
+			fmt.Println("Decrypting .env file...")
+			decryptedContent, err := DecryptContent([]byte(envContent))
+			if err != nil {
+				fmt.Printf("Error decrypting .env file: %s\n", err)
+				os.Exit(1)
+			}
+			envContent = string(decryptedContent)
+			fmt.Println("Decryption successful.")
+		} else if isMasked && useMaskedEncryption {
+			fmt.Println("Unmasking values in .env file...")
+			unmaskedContent, err := UnmaskEnvContent([]byte(envContent))
+			if err != nil {
+				fmt.Printf("Error unmasking .env file: %s\n", err)
+				os.Exit(1)
+			}
+			envContent = string(unmaskedContent)
+			fmt.Println("Unmasking successful.")
+		}
+
 		// Write content to .env file
 		err = os.WriteFile(".env", []byte(envContent), 0600)
 		if err != nil {
@@ -134,10 +255,10 @@ var pullCmd = &cobra.Command{
 		fmt.Println("Successfully pulled .env file from Gist")
 		
 		// Save Gist ID for future use if it's not already saved
-		config, err := LoadConfig()
+		config, err = LoadConfig()
 		if err == nil && config.LastGistID != pullGistID {
 			config.LastGistID = pullGistID
-			if err := SaveConfig(config); err == nil {
+			if saveErr := SaveConfig(config); saveErr == nil {
 				fmt.Println("Saved Gist ID for future use")
 			}
 		}

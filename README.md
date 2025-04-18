@@ -89,11 +89,87 @@ This provides much better security than storing tokens in plaintext files.
 - Your token is never displayed in full in terminal output
 - If secure credential storage isn't available, a fallback mechanism stores tokens with proper file permissions (0600)
 - Token removal command (`envi config --clear-token`) ensures tokens can be completely removed from storage
+- Warning when providing token via command line to discourage this less secure method
 
 ### File Handling
 
 - Proper file permissions (0600) ensure only the file owner can read or write the configuration
 - Automatic backup creation for critical operations (merge, pull) allows recovery if needed
+- Automatic fixing of insecure permissions on key files
+
+### Encryption
+
+Envi provides strong encryption for your .env files before storing them in GitHub Gists:
+
+- Industry-standard AES-256-GCM encryption
+- Two authentication options:
+  - Password-based encryption (uses SHA-256 for key derivation) with confirmation prompt
+  - File-based key storage (more secure for automated workflows)
+- Two encryption modes:
+  - Full encryption: Encrypts the entire file content
+  - Masked encryption: Encrypts only the values while keeping variable names visible
+- Encrypted data is base64-encoded for safe storage
+- Automatic encryption/decryption with minimal configuration
+- Strict validation of key file length and format
+- Automatic permission fixing for key files
+
+#### Encryption Usage
+
+To encrypt your .env file when pushing:
+
+```bash
+# Encrypt with password (will prompt for password and confirmation)
+envi push --encrypt
+
+# Mask values only, keeping variable names visible
+envi push --mask
+
+# Encrypt with a key file
+envi push --encrypt --use-key-file --key-file ~/.envi.key
+
+# Generate a new random key file and use it
+envi push --encrypt --generate-key --key-file ~/.envi.key
+
+# Provide password via command line (not recommended)
+envi push --encrypt --password "mypassword"
+```
+
+To decrypt when pulling:
+
+```bash
+# Auto-detect encryption and decrypt (will prompt for password if needed)
+envi pull
+
+# Explicitly decrypt with password
+envi pull --decrypt
+
+# Explicitly unmask values
+envi pull --unmask
+
+# Decrypt with key file
+envi pull --decrypt --use-key-file --key-file ~/.envi.key
+```
+
+#### Setting Encryption Defaults
+
+Configure encryption defaults to streamline your workflow:
+
+```bash
+# Always encrypt when pushing
+envi config --encrypt-by-default
+
+# Always use masked encryption (only encrypt values)
+envi config --encrypt-by-default --mask-by-default
+
+# Set default key file
+envi config --default-key-file ~/.envi.key
+
+# Use key file by default instead of password
+envi config --use-key-file
+
+# Disable encryption by default
+envi config --disable-encryption
+```
 
 ### Gist Security
 
@@ -101,9 +177,9 @@ Remember that private Gists:
 
 - Are not visible in public listings
 - Are not truly private - anyone with the URL can access them
-- Should not be used for highly sensitive information
+- Should not be used for highly sensitive information without encryption
 
-For highly sensitive environments, consider using a dedicated secrets management service.
+For highly sensitive environments, always use encryption with envi or consider a dedicated secrets management service.
 
 ## Command Reference
 
@@ -119,6 +195,13 @@ envi push
 
 - `--id`, `-i` [string]: GitHub Gist ID to update (if not provided, a new Gist will be created)
 - `--save`, `-s` [boolean]: Save the Gist ID to config for future updates (default: true)
+- `--desc`, `-d` [string]: Custom description for the Gist (default: auto-generated description with project and date)
+- `--encrypt`, `-e` [boolean]: Encrypt .env file before pushing to Gist (default: false, unless configured)
+- `--mask`, `-m` [boolean]: Mask the values in the .env file before pushing (default: false, unless configured)
+- `--use-key-file` [boolean]: Use a key file for encryption instead of password (default: false, unless configured)
+- `--key-file`, `-k` [string]: Path to the encryption key file (default: .envi.key, unless configured)
+- `--password`, `-p` [string]: Password for encryption (not recommended, use key file instead)
+- `--generate-key` [boolean]: Auto-generate a strong encryption key and save to key file (default: false)
 
 **Examples**:
 
@@ -129,8 +212,23 @@ envi push
 # Update an existing Gist
 envi push --id abc123def456
 
+# Create a new Gist with custom description
+envi push --desc "Production environment variables"
+
 # Create a new Gist without saving the ID
 envi push --save=false
+
+# Push with encryption (password-based)
+envi push --encrypt
+
+# Push with masked encryption (only values encrypted)
+envi push --mask
+
+# Push with encryption using a key file
+envi push --encrypt --use-key-file --key-file ~/.envi.key
+
+# Push with encryption and generate a new key file
+envi push --encrypt --generate-key
 ```
 
 ### Pull Command
@@ -144,8 +242,13 @@ envi pull
 **Flags**:
 
 - `--id`, `-i` [string]: GitHub Gist ID to pull from (if not specified, uses the saved ID)
-- `--backup`, `-b` [boolean]: Create a backup of the existing `.env` file before overwriting (default: false)
+- `--backup`, `-b` [boolean]: Create a backup of the existing `.env` file before overwriting (default: true)
 - `--force`, `-f` [boolean]: Force overwrite without confirmation if `.env` file exists (default: false)
+- `--decrypt`, `-d` [boolean]: Decrypt .env file after pulling from Gist (default: false, unless configured)
+- `--unmask` [boolean]: Unmask values in .env file (for masked encryption) (default: false, unless configured)
+- `--use-key-file` [boolean]: Use a key file for decryption instead of password (default: false, unless configured)
+- `--key-file`, `-k` [string]: Path to the encryption key file (default: .envi.key, unless configured)
+- `--password`, `-p` [string]: Password for decryption (not recommended, use key file instead)
 
 **Examples**:
 
@@ -162,8 +265,17 @@ envi pull --backup
 # Pull with force overwrite (no confirmation)
 envi pull --force
 
+# Pull and decrypt (password-based)
+envi pull --decrypt
+
+# Pull and unmask values
+envi pull --unmask
+
+# Pull and decrypt with key file
+envi pull --decrypt --use-key-file --key-file ~/.envi.key
+
 # Pull with all options
-envi pull --id abc123def456 --backup --force
+envi pull --id abc123def456 --backup --force --decrypt
 ```
 
 ### List Command
@@ -174,11 +286,42 @@ List available Gists containing `.env` files from your GitHub account.
 envi list
 ```
 
+**Flags**:
+
+- `--full-id` [boolean]: Display full Gist IDs instead of shortened IDs (default: false)
+- `--format` [string]: Custom format for displaying gists (e.g. 'id,desc,date')
+- `--sort` [string]: Sort gists by: 'date', 'name', or 'id' (default: 'date')
+
+**Examples**:
+
+```bash
+# List all .env gists
+envi list
+
+# Show full Gist IDs
+envi list --full-id
+
+# Sort by project name
+envi list --sort=name
+
+# Sort by Gist ID
+envi list --sort=id
+
+# Custom format showing only IDs and descriptions
+envi list --format="id,desc"
+
+# Custom format showing only IDs and update dates
+envi list --format="id,date"
+```
+
 **Output**:
 
-- Displays a list of your Gists containing `.env` files
-- Currently selected Gist (last used) is highlighted with an asterisk (\*)
-- Shows Gist descriptions and update times
+- Displays a color-coded list of your Gists containing `.env` files
+- Currently selected Gist (last used) is highlighted with a green asterisk (\*)
+- Shows project names, dates, and Gist descriptions
+- Indicates encryption status with [encrypted] or [masked] labels
+- Shows shortened Gist IDs by default (first 7 characters)
+- Provides human-readable time formats (e.g., "2 hours ago", "yesterday")
 
 ### Diff Command
 
@@ -304,6 +447,12 @@ envi config
 - `--token`, `-t` [string]: Set your GitHub personal access token
 - `--clear-gist`, `-c` [boolean]: Clear the saved Gist ID (default: false)
 - `--clear-token` [boolean]: Remove the GitHub token from secure storage (default: false)
+- `--encrypt-by-default` [boolean]: Enable encryption by default for all push operations (default: false)
+- `--mask-by-default` [boolean]: Use masked encryption by default (only encrypt values) (default: false)
+- `--disable-encryption` [boolean]: Disable encryption by default (default: false)
+- `--default-key-file` [string]: Set the default encryption key file path
+- `--use-key-file` [boolean]: Use key file by default instead of password for encryption (default: false)
+- `--force-file-storage` [boolean]: Force token storage in file instead of system credential manager (not recommended)
 
 **Examples**:
 
@@ -319,14 +468,48 @@ envi config --clear-gist
 
 # Remove stored GitHub token
 envi config --clear-token
+
+# Enable encryption by default
+envi config --encrypt-by-default
+
+# Enable masked encryption by default
+envi config --encrypt-by-default --mask-by-default
+
+# Set default key file
+envi config --default-key-file ~/.envi.key
+
+# Use key file by default
+envi config --use-key-file
+
+# Disable default encryption
+envi config --disable-encryption
 ```
 
 **Output**:
 
 - GitHub token status (securely stored or partially masked)
 - Default Gist ID (if set)
+- Encryption settings
 - Usage examples for the saved Gist ID
 - Security information about token storage
+
+## Best Practices
+
+### Secure Usage
+
+1. **Always use encryption** for sensitive environment variables, especially production credentials
+2. **Use key files** instead of passwords for automated workflows
+3. **Store key files securely** and ensure they have proper permissions (0600)
+4. **Back up your encryption keys** in a secure location
+5. **Never commit key files** to version control
+6. **Avoid using the `--password` flag** on the command line, as it may be visible in command history
+
+### Gist Management
+
+1. **Use descriptive Gist descriptions** to easily identify different environments
+2. **Use the `--sort` option** when listing Gists to organize them by project, date, or ID
+3. **Use the `--format` option** to customize the Gist list display for your needs
+4. **Always check the Gist ID** when pulling or pushing to avoid accidentally using the wrong environment
 
 ## Command Help
 
@@ -345,3 +528,12 @@ envi merge --help
 envi validate --help
 envi config --help
 ```
+
+## Security Notes
+
+- Envi uses AES-256-GCM encryption, which is a secure authenticated encryption mode
+- Password-based encryption uses SHA-256 for key derivation
+- File permissions are automatically checked and fixed for key files
+- Secure validation is performed for key files and passwords
+- Always keep your encryption keys secure - if you lose them, you won't be able to decrypt your data
+- Consider using masked encryption when you need variable names to remain visible but values encrypted

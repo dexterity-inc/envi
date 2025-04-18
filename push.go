@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/google/go-github/v37/github"
 	"github.com/spf13/cobra"
@@ -16,11 +19,15 @@ var (
 	
 	// Flag to save the last used gist ID
 	saveGistID bool
+	
+	// Flag to specify custom description
+	gistDescription string
 )
 
 func init() {
 	pushCmd.Flags().StringVarP(&updateGistID, "id", "i", "", "GitHub Gist ID to update (if not provided, a new Gist will be created)")
 	pushCmd.Flags().BoolVarP(&saveGistID, "save", "s", true, "Save the Gist ID to config for future updates (default: true)")
+	pushCmd.Flags().StringVarP(&gistDescription, "desc", "d", "", "Custom description for the Gist")
 	rootCmd.AddCommand(pushCmd)
 }
 
@@ -36,11 +43,65 @@ var pushCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Load config to check for default encryption settings
+		config, err := LoadConfig()
+		if err != nil {
+			fmt.Printf("Warning: Could not load config: %s\n", err)
+		} else {
+			// Apply default encryption settings if not explicitly set by flags
+			if !cmd.Flags().Changed("encrypt") && !cmd.Flags().Changed("mask") && config.EncryptByDefault {
+				if config.UseMaskedEncryption {
+					useMaskedEncryption = true
+					fmt.Println("Using default setting: Masked encryption enabled")
+				} else {
+					useEncryption = true
+					fmt.Println("Using default setting: Full encryption enabled")
+				}
+			}
+			
+			if !cmd.Flags().Changed("use-key-file") && config.UseKeyFileByDefault {
+				useKeyFile = true
+				fmt.Println("Using default setting: Using key file for encryption")
+			}
+			
+			if !cmd.Flags().Changed("key-file") && config.DefaultKeyFile != "" {
+				encryptionKeyFile = config.DefaultKeyFile
+				fmt.Printf("Using default key file: %s\n", encryptionKeyFile)
+			}
+		}
+
 		// Read .env file
 		envContent, err := os.ReadFile(".env")
 		if err != nil {
 			fmt.Printf("Error reading .env file: %s\n", err)
 			os.Exit(1)
+		}
+
+		// Encrypt content if requested
+		if useEncryption && useMaskedEncryption {
+			fmt.Println("Warning: Both --encrypt and --mask flags specified. Using --mask (masked encryption).")
+			useEncryption = false
+			useMaskedEncryption = true
+		}
+		
+		if useEncryption {
+			fmt.Println("Encrypting .env file...")
+			encryptedContent, err := EncryptContent(envContent)
+			if err != nil {
+				fmt.Printf("Error encrypting .env file: %s\n", err)
+				os.Exit(1)
+			}
+			envContent = encryptedContent
+			fmt.Println("Encryption successful.")
+		} else if useMaskedEncryption {
+			fmt.Println("Masking values in .env file...")
+			maskedContent, err := MaskEnvContent(envContent)
+			if err != nil {
+				fmt.Printf("Error masking .env file: %s\n", err)
+				os.Exit(1)
+			}
+			envContent = maskedContent
+			fmt.Println("Value masking successful. Variable names remain visible.")
 		}
 
 		// Create GitHub client
@@ -67,7 +128,16 @@ var pushCmd = &cobra.Command{
 		// Create or update gist
 		var gist *github.Gist
 		filename := ".env"
-		description := "Environment variables - Managed with envi CLI"
+		
+		// Generate informative description for the Gist
+		description := generateGistDescription()
+		
+		// Add encryption indicator to description
+		if useEncryption {
+			description += " (encrypted)"
+		} else if useMaskedEncryption {
+			description += " (masked)"
+		}
 		
 		if updateGistID != "" {
 			// Try to update an existing gist
@@ -81,6 +151,26 @@ var pushCmd = &cobra.Command{
 					github.GistFilename(filename): {
 						Content: github.String(string(envContent)),
 					},
+				}
+				
+				// Update description if needed, but preserve custom parts from existing description
+				if gistDescription != "" {
+					// User provided a new custom description
+					*existingGist.Description = gistDescription
+				} else if *existingGist.Description == "Environment variables - Managed with envi CLI" ||
+					strings.HasPrefix(*existingGist.Description, "Environment variables for ") {
+					// Default description or auto-generated description - replace with new one
+					*existingGist.Description = description
+				}
+				
+				// Ensure encryption indicator is present/removed as needed
+				if useEncryption && !strings.Contains(*existingGist.Description, "(encrypted)") {
+					*existingGist.Description += " (encrypted)"
+				} else if useMaskedEncryption && !strings.Contains(*existingGist.Description, "(masked)") {
+					*existingGist.Description += " (masked)"
+				} else if !useEncryption && !useMaskedEncryption {
+					*existingGist.Description = strings.Replace(*existingGist.Description, " (encrypted)", "", 1)
+					*existingGist.Description = strings.Replace(*existingGist.Description, " (masked)", "", 1)
 				}
 				
 				gist, _, err = client.Gists.Edit(ctx, updateGistID, existingGist)
@@ -100,6 +190,17 @@ var pushCmd = &cobra.Command{
 				}
 				
 				return
+			}
+		}
+		
+		// Use custom description if provided
+		if gistDescription != "" {
+			description = gistDescription
+			// Still add encryption indicator
+			if useEncryption && !strings.Contains(description, "(encrypted)") {
+				description += " (encrypted)"
+			} else if useMaskedEncryption && !strings.Contains(description, "(masked)") {
+				description += " (masked)"
 			}
 		}
 		
@@ -134,11 +235,10 @@ var pushCmd = &cobra.Command{
 	},
 }
 
-// saveGistIDToConfig saves the gist ID to the config file
 func saveGistIDToConfig(gistID string) {
 	config, err := LoadConfig()
 	if err != nil {
-		fmt.Printf("Warning: Could not save Gist ID to config: %s\n", err)
+		fmt.Printf("Warning: Could not load config: %s\n", err)
 		return
 	}
 	
@@ -149,5 +249,27 @@ func saveGistIDToConfig(gistID string) {
 		return
 	}
 	
-	fmt.Println("Gist ID saved for future updates. Use 'envi push' without '--id' flag to update this Gist.")
+	fmt.Println("Saved Gist ID to config for future use")
+}
+
+// generateGistDescription creates a detailed description for easy Gist identification
+func generateGistDescription() string {
+	// Start with base description
+	description := "Environment variables"
+	
+	// Try to add project name from directory
+	currentDir, err := os.Getwd()
+	if err == nil {
+		projectName := filepath.Base(currentDir)
+		description = fmt.Sprintf("Environment variables for %s", projectName)
+	}
+	
+	// Add timestamp
+	timestamp := time.Now().Format("2006-01-02")
+	description += fmt.Sprintf(" (%s)", timestamp)
+	
+	// Add "Managed with envi CLI" suffix
+	description += " - Managed with envi CLI"
+	
+	return description
 } 
