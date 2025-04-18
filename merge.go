@@ -158,6 +158,7 @@ var mergeCmd = &cobra.Command{
 		// Identify and merge variables
 		mergedVars := make(map[string]string)
 		var onlyLocal, onlyRemote, conflicts []string
+		var conflictMap map[string][]string = make(map[string][]string)
 		
 		// First, add all remote variables
 		for key, value := range remoteVars {
@@ -170,31 +171,15 @@ var mergeCmd = &cobra.Command{
 				// Variable exists in both, check for conflicts
 				if localValue != remoteValue {
 					conflicts = append(conflicts, key)
+					conflictMap[key] = []string{localValue, remoteValue}
 					
-					// Resolve conflict based on flags
+					// If auto-resolve is enabled, apply preference
 					if preferLocalFlag {
 						mergedVars[key] = localValue
 					} else if preferRemoteFlag {
 						mergedVars[key] = remoteValue
-					} else {
-						// Interactive resolution
-						fmt.Printf("\nConflict for variable '%s':\n", key)
-						fmt.Printf("  1. Local:  %s\n", localValue)
-						fmt.Printf("  2. Remote: %s\n", remoteValue)
-						fmt.Print("Choose value (1/2): ")
-						
-						var choice string
-						fmt.Scanln(&choice)
-						
-						if choice == "1" {
-							mergedVars[key] = localValue
-						} else if choice == "2" {
-							mergedVars[key] = remoteValue
-						} else {
-							fmt.Println("Invalid choice, using local value by default")
-							mergedVars[key] = localValue
-						}
 					}
+					// Otherwise, we'll resolve interactively later
 				}
 				// Otherwise, already have the remote value
 			} else {
@@ -208,6 +193,33 @@ var mergeCmd = &cobra.Command{
 		for key := range remoteVars {
 			if _, exists := localVars[key]; !exists {
 				onlyRemote = append(onlyRemote, key)
+			}
+		}
+		
+		// If we have conflicts and no auto-resolution is set, resolve them
+		if len(conflicts) > 0 && !preferLocalFlag && !preferRemoteFlag {
+			// Use CLI prompt for each conflict
+			fmt.Println("\nResolving conflicts...")
+			for _, key := range conflicts {
+				localValue := localVars[key]
+				remoteValue := remoteVars[key]
+				
+				fmt.Printf("\nConflict for variable '%s':\n", key)
+				fmt.Printf("  1. Local:  %s\n", localValue)
+				fmt.Printf("  2. Remote: %s\n", remoteValue)
+				fmt.Print("Choose value (1/2): ")
+				
+				var choice string
+				fmt.Scanln(&choice)
+				
+				if choice == "1" {
+					mergedVars[key] = localValue
+				} else if choice == "2" {
+					mergedVars[key] = remoteValue
+				} else {
+					fmt.Println("Invalid choice, using local value by default")
+					mergedVars[key] = localValue
+				}
 			}
 		}
 		
@@ -232,51 +244,43 @@ var mergeCmd = &cobra.Command{
 		}
 		sort.Strings(sortedKeys)
 		
-		// Generate the merged file content
+		// Build merged env file content
 		var mergedContent strings.Builder
 		
-		// Add a header
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		mergedContent.WriteString(fmt.Sprintf("# Merged by envi on %s\n", timestamp))
-		mergedContent.WriteString(fmt.Sprintf("# Merged local .env with Gist ID: %s\n\n", mergeGistID))
+		// First, add a header comment
+		mergedContent.WriteString("# Merged .env file - Created by envi CLI\n")
+		mergedContent.WriteString(fmt.Sprintf("# Created: %s\n\n", time.Now().Format(time.RFC3339)))
 		
 		// Add variables with their comments
 		for _, key := range sortedKeys {
-			// Add any comments for this key
-			if keyComments, exists := allComments[key]; exists {
-				for _, comment := range keyComments {
-					mergedContent.WriteString(comment + "\n")
+			// Add any comments for this line
+			if comments, exists := allComments[key]; exists {
+				for _, comment := range comments {
+					mergedContent.WriteString(fmt.Sprintf("# %s\n", comment))
 				}
 			}
 			
-			mergedContent.WriteString(fmt.Sprintf("%s=%s\n", key, mergedVars[key]))
-			
-			// Add newline after each variable group
-			mergedContent.WriteString("\n")
+			// Add the variable itself
+			value := mergedVars[key]
+			mergedContent.WriteString(fmt.Sprintf("%s=%s\n\n", key, value))
 		}
 		
-		// Write the merged content to .env
+		// Write merged content to .env file
 		err = os.WriteFile(".env", []byte(mergedContent.String()), 0600)
 		if err != nil {
 			fmt.Printf("Error writing merged .env file: %s\n", err)
 			os.Exit(1)
 		}
 		
-		// Display merge summary
+		// Display summary
 		fmt.Println("\n=== Merge Summary ===")
-		fmt.Printf("Variables from remote: %d\n", len(remoteVars))
-		fmt.Printf("Variables from local: %d\n", len(localVars))
-		fmt.Printf("Variables in merged result: %d\n", len(mergedVars))
-		fmt.Printf("  - Only in local: %d\n", len(onlyLocal))
-		fmt.Printf("  - Only in remote: %d\n", len(onlyRemote))
-		fmt.Printf("  - Conflicts resolved: %d\n", len(conflicts))
+		fmt.Printf("Variables only in local: %d\n", len(onlyLocal))
+		fmt.Printf("Variables only in remote: %d\n", len(onlyRemote))
+		fmt.Printf("Variables with conflicts resolved: %d\n", len(conflicts))
+		fmt.Println("Successfully merged to .env file")
 		
-		fmt.Println("\n✅ Successfully merged .env file")
-		
-		// Push the merged result if requested
+		// Push to GitHub if requested
 		if mergePushFlag {
-			fmt.Println("\nPushing merged result back to Gist...")
-			
 			// Update the existing gist
 			existingGist, _, err := client.Gists.Get(ctx, mergeGistID)
 			if err != nil {
@@ -284,31 +288,25 @@ var mergeCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			
-			filename := ".env"
-			mergedContent := mergedContent.String()
-			
 			existingGist.Files = map[github.GistFilename]github.GistFile{
-				github.GistFilename(filename): {
-					Content: github.String(mergedContent),
+				github.GistFilename(".env"): {
+					Content: github.String(mergedContent.String()),
 				},
 			}
 			
-			// Update description to indicate merge
-			description := "Environment variables - Merged with envi CLI"
-			existingGist.Description = &description
-			
 			_, _, err = client.Gists.Edit(ctx, mergeGistID, existingGist)
 			if err != nil {
-				fmt.Printf("Error updating Gist with merged content: %s\n", err)
+				fmt.Printf("Error pushing merged result to Gist: %s\n", err)
 				os.Exit(1)
 			}
 			
-			fmt.Println("✅ Successfully pushed merged result to Gist")
+			fmt.Println("Successfully pushed merged result to Gist")
 		}
 	},
 }
 
-// parseEnvFileWithComments reads an env file and returns variables and comments
+// parseEnvFileWithComments parses an .env file and returns a map of variables
+// and a map of comments keyed by the variable name they appear above
 func parseEnvFileWithComments(filePath string) (map[string]string, map[string][]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -319,45 +317,54 @@ func parseEnvFileWithComments(filePath string) (map[string]string, map[string][]
 	vars := make(map[string]string)
 	comments := make(map[string][]string)
 	
-	var currentComments []string
-	var lastKey string
-	
 	scanner := bufio.NewScanner(file)
-	lineRegex := `^\s*([\w\.]+)\s*=\s*(.*)?\s*$`
+	lineNum := 0
+	
+	var currentComments []string
+	var lastVarName string
+	
+	re := regexp.MustCompile(`^\s*([A-Za-z0-9_]+)=(.*)$`)
 	
 	for scanner.Scan() {
+		lineNum++
 		line := scanner.Text()
-		line = strings.TrimSpace(line)
 		
-		// Handle comments
-		if line == "" {
-			// Empty line, reset current comments unless we just processed a key
-			if lastKey != "" {
-				lastKey = ""
-			} else {
-				currentComments = nil
-			}
-			continue
-		} else if strings.HasPrefix(line, "#") {
-			// Store comment
-			currentComments = append(currentComments, line)
+		// Skip empty lines
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		
-		// Extract key-value pairs
-		matches := regexp.MustCompile(lineRegex).FindStringSubmatch(line)
+		// Handle comments
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			commentText := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+			currentComments = append(currentComments, commentText)
+			continue
+		}
+		
+		// Parse variable assignments
+		matches := re.FindStringSubmatch(line)
 		if len(matches) == 3 {
 			key := matches[1]
 			value := matches[2]
-			vars[key] = value
 			
-			// Associate comments with this key
+			// Store the variable
+			vars[key] = value
+			lastVarName = key
+			
+			// Associate comments with this variable
 			if len(currentComments) > 0 {
 				comments[key] = currentComments
 				currentComments = nil
 			}
-			
-			lastKey = key
+		}
+	}
+	
+	// If there are trailing comments, associate them with the last variable
+	if len(currentComments) > 0 && lastVarName != "" {
+		if existing, ok := comments[lastVarName]; ok {
+			comments[lastVarName] = append(existing, currentComments...)
+		} else {
+			comments[lastVarName] = currentComments
 		}
 	}
 	

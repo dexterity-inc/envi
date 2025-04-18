@@ -118,7 +118,7 @@ var diffCmd = &cobra.Command{
 			fmt.Printf("Error parsing remote .env file: %s\n", err)
 			os.Exit(1)
 		}
-
+		
 		// Compare variables
 		var onlyLocal, onlyRemote, different []string
 		

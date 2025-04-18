@@ -40,222 +40,238 @@ export GITHUB_TOKEN=your_github_personal_access_token
 
 In both cases, you'll need a GitHub token with the `gist` scope.
 
-### Push .env file to GitHub Gist
+## Command Reference
 
-To push the `.env` file in your current directory to a new GitHub Gist:
+### Push Command
 
-```bash
-envi push
-```
-
-The command will create a new Gist, output the Gist ID and URL, and save the ID for future updates.
-
-#### Update an existing Gist
-
-To update an existing Gist instead of creating a new one:
-
-```bash
-envi push --id GIST_ID
-```
-
-Replace `GIST_ID` with the ID of the Gist you want to update.
-
-If you've previously pushed a Gist with `envi push`, the tool will remember the last Gist ID and offer to update it:
+Push your local `.env` file to a GitHub Gist.
 
 ```bash
 envi push
 ```
 
-It will prompt you whether to use the saved Gist ID.
+**Flags**:
 
-#### Disable saving Gist ID
+- `--id`, `-i` [string]: GitHub Gist ID to update (if not provided, a new Gist will be created)
+- `--save`, `-s` [boolean]: Save the Gist ID to config for future updates (default: true)
 
-If you don't want to save the Gist ID for future updates:
+**Examples**:
 
 ```bash
+# Create a new Gist
+envi push
+
+# Update an existing Gist
+envi push --id abc123def456
+
+# Create a new Gist without saving the ID
 envi push --save=false
 ```
 
-### Pull .env file from GitHub Gist
+### Pull Command
 
-There are several ways to pull an `.env` file from a GitHub Gist:
-
-1. Using a specific Gist ID:
-
-```bash
-envi pull --id GIST_ID
-```
-
-Replace `GIST_ID` with the ID of the Gist you want to pull from.
-
-2. Using the saved Gist ID (if you've previously pushed or pulled):
+Pull an `.env` file from a GitHub Gist and save it to the current directory.
 
 ```bash
 envi pull
 ```
 
-This will use the Gist ID saved in your config file, after asking for confirmation.
+**Flags**:
 
-#### Additional Pull Options
+- `--id`, `-i` [string]: GitHub Gist ID to pull from (if not specified, uses the saved ID)
+- `--backup`, `-b` [boolean]: Create a backup of the existing `.env` file before overwriting (default: false)
+- `--force`, `-f` [boolean]: Force overwrite without confirmation if `.env` file exists (default: false)
 
-Create a backup of your existing `.env` file before overwriting:
+**Examples**:
 
 ```bash
+# Pull using saved Gist ID (with confirmation)
+envi pull
+
+# Pull from specific Gist ID
+envi pull --id abc123def456
+
+# Pull and create backup
 envi pull --backup
-```
 
-This creates a timestamped backup file (e.g., `.env.backup.20230615-123045`).
-
-Skip confirmation when overwriting an existing `.env` file:
-
-```bash
+# Pull with force overwrite (no confirmation)
 envi pull --force
+
+# Pull with all options
+envi pull --id abc123def456 --backup --force
 ```
 
-Combine options as needed:
+### List Command
 
-```bash
-envi pull --id GIST_ID --backup --force
-```
-
-### List Your Gists
-
-View all your GitHub Gists containing `.env` files:
+List available Gists containing `.env` files from your GitHub account.
 
 ```bash
 envi list
 ```
 
-This displays a table of your Gists, highlighting the currently selected one.
+**Output**:
 
-#### Additional List Options
+- Displays a list of your Gists containing `.env` files
+- Currently selected Gist (last used) is highlighted with an asterisk (\*)
+- Shows Gist descriptions and update times
 
-Show all Gists, not just those containing `.env` files:
+### Diff Command
 
-```bash
-envi list --all
-```
-
-Limit the number of Gists displayed:
-
-```bash
-envi list --limit 5
-```
-
-### Compare Local and Remote .env Files
-
-Compare your local `.env` file with a remote one:
+Compare your local `.env` file with a remote one stored in a GitHub Gist.
 
 ```bash
 envi diff
 ```
 
-This shows variables that are only in local, only in remote, or have different values.
+**Flags**:
 
-To see the actual values (not just variable names):
+- `--id`, `-i` [string]: GitHub Gist ID to compare with (if not specified, uses the saved ID)
+- `--values`, `-v` [boolean]: Show values in the diff output (may expose sensitive data) (default: false)
+
+**Examples**:
 
 ```bash
+# Compare with saved Gist ID
+envi diff
+
+# Compare with specific Gist ID
+envi diff --id abc123def456
+
+# Compare and show actual values
 envi diff --values
 ```
 
-⚠️ Note: Using `--values` will display the actual values which may contain sensitive data.
+**Output**:
 
-### Merge Local and Remote .env Files
+- Variables only in local file
+- Variables only in remote file
+- Variables with different values
+- Summary of differences
 
-Merge your local `.env` file with a remote one:
+### Merge Command
+
+Merge your local `.env` file with a remote one stored in a GitHub Gist.
 
 ```bash
 envi merge
 ```
 
-This will interactively prompt you to resolve conflicts between local and remote values.
+**Flags**:
 
-#### Additional Merge Options
+- `--id`, `-i` [string]: GitHub Gist ID to merge with (if not specified, uses the saved ID)
+- `--local`, `-l` [boolean]: Prefer local values when there are conflicts (default: false)
+- `--remote`, `-r` [boolean]: Prefer remote values when there are conflicts (default: false)
+- `--backup`, `-b` [boolean]: Create a backup of the local `.env` file before merging (default: true)
+- `--push`, `-p` [boolean]: Push the merged result back to the Gist (default: false)
 
-Automatically prefer local values for conflicts:
+**Examples**:
 
 ```bash
+# Interactive merge with saved Gist ID
+envi merge
+
+# Merge with specific Gist ID
+envi merge --id abc123def456
+
+# Merge preferring local values for conflicts
 envi merge --local
-```
 
-Automatically prefer remote values for conflicts:
-
-```bash
+# Merge preferring remote values for conflicts
 envi merge --remote
-```
 
-Push the merged result back to the Gist:
-
-```bash
-envi merge --push
-```
-
-Disable creating a backup (not recommended):
-
-```bash
+# Merge without creating a backup
 envi merge --backup=false
+
+# Merge and push result back to Gist
+envi merge --push
+
+# Combine options
+envi merge --id abc123def456 --local --backup --push
 ```
 
-### Validate .env file against .env.example
+**Note**: You cannot use both `--local` and `--remote` flags together.
 
-To check if your `.env` file contains all the variables defined in `.env.example`:
+### Validate Command
+
+Compare your `.env` file with `.env.example` to find missing variables.
 
 ```bash
 envi validate
 ```
 
-This will show you any missing variables. To automatically add the missing variables to your `.env` file:
+**Flags**:
+
+- `--fix`, `-f` [boolean]: Automatically add missing environment variables from `.env.example` to `.env` (default: false)
+- `--example`, `-e` [string]: Path to the example env file (default: ".env.example")
+
+**Examples**:
 
 ```bash
+# Check for missing variables
+envi validate
+
+# Auto-fix missing variables
 envi validate --fix
+
+# Use custom example file
+envi validate --example=.env.template
+
+# Use custom example file and auto-fix
+envi validate --example=.env.template --fix
 ```
 
-Additional options:
+**Output**:
 
-- `--example`, `-e`: Specify a custom path to the example file (default: `.env.example`)
+- List of missing variables
+- Success message if all variables exist
+- Automatic addition of missing variables when using `--fix`
 
-### View and Manage Configuration
+### Config Command
 
-To view your current configuration:
+Configure Envi CLI settings including your GitHub token and default Gist ID.
 
 ```bash
 envi config
 ```
 
-This will display your GitHub token status and any saved Gist ID.
+**Flags**:
 
-To clear the saved Gist ID:
+- `--token`, `-t` [string]: Set your GitHub personal access token
+- `--clear-gist`, `-c` [boolean]: Clear the saved Gist ID (default: false)
+
+**Examples**:
 
 ```bash
+# View current configuration
+envi config
+
+# Set GitHub token
+envi config --token=your_github_personal_access_token
+
+# Clear saved Gist ID
 envi config --clear-gist
 ```
 
+**Output**:
+
+- GitHub token status (partially masked for security)
+- Default Gist ID (if set)
+- Usage examples for the saved Gist ID
+
 ## Command Help
 
-For more information about the commands:
+For more information about any command:
 
 ```bash
 # General help
 envi --help
 
-# Push command help
+# Command-specific help
 envi push --help
-
-# Pull command help
 envi pull --help
-
-# List command help
 envi list --help
-
-# Diff command help
 envi diff --help
-
-# Merge command help
 envi merge --help
-
-# Config command help
-envi config --help
-
-# Validate command help
 envi validate --help
+envi config --help
 ```
