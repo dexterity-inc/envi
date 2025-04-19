@@ -1,0 +1,51 @@
+project_name: envi
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/envi
+    ldflags:
+      - -s -w -X github.com/dexterity-inc/envi/internal/version.Version={{.Version}}
+    binary: envi
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      amd64: x86_64
+      arm64: arm64
+    format_overrides:
+      - goos: windows
+        format: zip
+
+release:
+  github:
+    owner: dexterity-inc
+    name: envi
+
+brews:
+  - name: envi
+    tap:
+      owner: dexterity-inc
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/dexterity-inc/envi
+    description: "A secure tool for managing environment variables with GitHub Gists"
+    license: "MIT"
+    install: |
+      bin.install "envi"
+    test: |
+      assert_match "Envi is a secure tool", shell_output("#{bin}/envi --help")
+    caveats: |
+      To get started, run:
+        envi config --token <your_github_token>
