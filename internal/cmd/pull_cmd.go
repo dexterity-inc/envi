@@ -164,7 +164,7 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		}
 		
 		if err != nil {
-			fmt.Printf("Error decrypting content: %s\n", err)
+			fmt.Println("Error decrypting content. Please check the encryption key or password and try again.")
 			os.Exit(1)
 		}
 		
