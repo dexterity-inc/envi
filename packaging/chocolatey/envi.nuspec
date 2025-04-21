@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>envi</id>
+    <version>1.0.0</version>
+    <title>Envi</title>
+    <authors>Dexterity Inc</authors>
+    <projectUrl>https://github.com/dexterity-inc/envi</projectUrl>
+    <licenseUrl>https://github.com/dexterity-inc/envi/blob/main/LICENSE</licenseUrl>
+    <iconUrl>https://raw.githubusercontent.com/dexterity-inc/envi/main/assets/icon.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Envi is a CLI tool for securely managing and sharing environment variables using GitHub Gists. Store your .env files in private Gists, mask or fully encrypt sensitive values, and easily share environment configurations with your team.</description>
+    <summary>Secure environment variable management using GitHub Gists</summary>
+    <releaseNotes>https://github.com/dexterity-inc/envi/releases/tag/v1.0.0</releaseNotes>
+    <tags>cli environment-variables github gist dotenv security encryption</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package> 
