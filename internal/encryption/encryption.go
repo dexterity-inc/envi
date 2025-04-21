@@ -107,7 +107,7 @@ func DecryptContent(content []byte) ([]byte, error) {
 	// Get the encryption key
 	key, err := getEncryptionKey()
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to retrieve encryption key")
 	}
 	
 	// Create a new AES cipher block
