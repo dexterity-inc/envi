@@ -137,7 +137,7 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 			}
 			
 			if err != nil {
-				fmt.Printf("Error decrypting content: %s\n", err)
+				fmt.Println("Error decrypting content. Please check your encryption settings and try again.")
 				os.Exit(1)
 			}
 			
