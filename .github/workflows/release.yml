@@ -26,6 +26,15 @@ jobs:
       - name: Update Go modules
         run: go mod tidy
 
+      - name: Commit changes if needed
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            git config --global user.email "github-actions@github.com"
+            git config --global user.name "GitHub Actions"
+            git add go.mod go.sum
+            git commit -m "chore: update go.mod and go.sum" || echo "No changes to commit"
+          fi
+
       - name: Validate GoReleaser Config
         uses: goreleaser/goreleaser-action@v5
         with:
