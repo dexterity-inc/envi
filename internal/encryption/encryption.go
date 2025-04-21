@@ -307,7 +307,7 @@ func getEncryptionKey() ([]byte, error) {
 		// Use TUI for password input
 		password, err = tui.GetPassword("Enter encryption password", false)
 		if err != nil {
-			return nil, err
+			return nil, errors.New("failed to retrieve encryption password")
 		}
 	} else {
 		// Use terminal input
@@ -331,7 +331,7 @@ func getEncryptionKey() ([]byte, error) {
 func getKeyFromFile() ([]byte, error) {
 	keyData, err := os.ReadFile(EncryptionKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("error reading key file: %w", err)
+		return nil, errors.New("failed to read encryption key file")
 	}
 	
 	// Clean the key data

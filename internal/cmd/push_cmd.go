@@ -111,7 +111,7 @@ func runPushCommand(cmd *cobra.Command, args []string) {
 		fmt.Println("Masking values in .env file...")
 		maskedContent, err := encryption.MaskEnvContent(envContent)
 		if err != nil {
-			fmt.Printf("Error masking .env file: %s\n", err)
+			fmt.Println("Error masking .env file. Please check the input and try again.")
 			os.Exit(1)
 		}
 		envContent = maskedContent
