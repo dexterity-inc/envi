@@ -18,34 +18,84 @@ builds:
 archives:
   - format: tar.gz
     name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
-    replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      amd64: x86_64
-      arm64: arm64
     format_overrides:
       - goos: windows
         format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
 
 release:
   github:
     owner: dexterity-inc
     name: envi
+  prerelease: auto
+  draft: false
 
 brews:
   - name: envi
-    tap:
+    repository:
       owner: dexterity-inc
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: goreleaser@dexterity-inc
     homepage: https://github.com/dexterity-inc/envi
-    description: "A secure tool for managing environment variables with GitHub Gists"
+    description: "CLI tool to push and pull .env files to/from GitHub Gists"
     license: "MIT"
+    dependencies:
+      - name: go
+        type: build
     install: |
-      bin.install "envi"
+      system "go", "build", *std_go_args
     test: |
-      assert_match "Envi is a secure tool", shell_output("#{bin}/envi --help")
+      assert_match "environment variable management", shell_output("#{bin}/envi --help")
     caveats: |
       To get started, run:
         envi config --token <your_github_token>
+
+scoops:
+  - name: envi
+    repository:
+      owner: dexterity-inc
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    homepage: https://github.com/dexterity-inc/envi
+    description: "A secure tool for managing environment variables with GitHub Gists"
+    license: MIT
+
+nfpms:
+  - maintainer: Dexterity Inc
+    description: "A secure tool for managing environment variables with GitHub Gists"
+    homepage: https://github.com/dexterity-inc/envi
+    license: MIT
+    formats:
+      - deb
+      - rpm
+
+chocolateys:
+  - name: envi
+    title: Envi
+    authors: Dexterity Inc
+    project_url: https://github.com/dexterity-inc/envi
+    url_template: "https://github.com/dexterity-inc/envi/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    copyright: 2023 Dexterity Inc
+    license_url: https://github.com/dexterity-inc/envi/blob/main/LICENSE
+    require_license_acceptance: false
+    project_source_url: https://github.com/dexterity-inc/envi
+    docs_url: https://github.com/dexterity-inc/envi/blob/main/README.md
+    bug_tracker_url: https://github.com/dexterity-inc/envi/issues
+    tags: "cli environment-variables github gist dotenv security encryption"
+    summary: "Secure environment variable management using GitHub Gists"
+    description: |
+      Envi is a CLI tool for securely managing and sharing environment variables using GitHub Gists.
+
+      Store your .env files in private Gists, mask or fully encrypt sensitive values, and easily share environment configurations with your team.
+    release_notes: "https://github.com/dexterity-inc/envi/releases/tag/v{{ .Version }}"
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+    source_repo: "https://push.chocolatey.org/"
