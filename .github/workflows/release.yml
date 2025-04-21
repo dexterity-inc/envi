@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -33,6 +34,10 @@ jobs:
             git config --global user.name "GitHub Actions"
             git add go.mod go.sum
             git commit -m "chore: update go.mod and go.sum" || echo "No changes to commit"
+            
+            # Force update the tag to point to the new commit
+            git tag -f ${GITHUB_REF#refs/tags/}
+            git push --force origin ${GITHUB_REF#refs/tags/}
           fi
 
       - name: Validate GoReleaser Config
