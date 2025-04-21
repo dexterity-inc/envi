@@ -60,25 +60,25 @@ func EncryptContent(content []byte) ([]byte, error) {
 	// Get the encryption key
 	key, err := getEncryptionKey()
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to retrieve encryption key")
 	}
 
 	// Create a new AES cipher block
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to create AES cipher block")
 	}
 
 	// Create a new GCM
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to create GCM")
 	}
 
 	// Create a nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
+		return nil, errors.New("failed to generate nonce")
 	}
 
 	// Encrypt the data
