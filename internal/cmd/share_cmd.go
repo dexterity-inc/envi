@@ -69,7 +69,7 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 	// Prepare environment content if needed
 	envContent, err := prepareEnvContent()
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error: An issue occurred while preparing the environment content. Please check the input and try again.")
 		os.Exit(1)
 	}
 	
