@@ -90,7 +90,6 @@ envi pull --id GIST_ID
 - `envi share`: Share .env files with team members
 - `envi validate`: Validate .env file format and required variables
 - `envi merge`: Merge multiple .env files with conflict resolution
-- `envi version`: Display version information and build details
 - `envi completion`: Generate shell completion scripts for better CLI experience
 
 ## Advanced Usage
@@ -148,6 +147,18 @@ envi merge --files .env.defaults,.env.custom --overwrite
 
 # Output to a different file and sort variables
 envi merge --files .env.base,.env.test --output .env.combined --sort
+```
+
+### Version Information
+
+To check the version of Envi CLI:
+
+```bash
+# Display version number
+envi --version
+
+# Or using the short flag
+envi -v
 ```
 
 ### Shell Completion
