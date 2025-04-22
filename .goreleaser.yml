@@ -86,7 +86,7 @@ nfpms:
     formats:
       - deb
       - rpm
-
+# Temporarily commenting out Chocolatey publishing until the previous version (1.0.9) is approved
 chocolateys:
   - name: envi
     title: Envi
@@ -108,3 +108,4 @@ chocolateys:
     release_notes: "https://github.com/dexterity-inc/envi/releases/tag/v{{ .Version }}"
     api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
     source_repo: "https://push.chocolatey.org/"
+    skip_publish: true # Build the package but don't upload to Chocolatey while previous version is in review
