@@ -32,6 +32,8 @@ func Execute() error {
 	InitListCommand()
 	InitValidateCommand()
 	InitMergeCommand()
+	InitVersionCommand()
+	InitCompletionCommand()
 	
 	// Initialize command flags
 	encryption.InitEncryptionFlags(rootCmd)
