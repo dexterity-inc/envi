@@ -40,6 +40,15 @@ jobs:
             git push --force origin ${GITHUB_REF#refs/tags/}
           fi
 
+      - name: Install Chocolatey
+        run: |
+          # Install Chocolatey
+          curl -fsSL https://chocolatey.org/install.sh | sudo bash
+          # Make sure choco is in the PATH
+          echo "::add-path::/usr/local/bin"
+          # Verify installation
+          choco --version
+
       - name: Validate GoReleaser Config
         uses: goreleaser/goreleaser-action@v5
         with:
