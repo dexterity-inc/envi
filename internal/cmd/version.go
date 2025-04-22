@@ -19,6 +19,13 @@ var versionCmd = &cobra.Command{
 
 func displayVersion() {
 	fmt.Printf("Envi CLI v%s\n", version.GetVersion())
+	
+	// Only show commit and build date if not using the dev version
+	if version.GetVersion() != "dev" {
+		fmt.Printf("- Commit: %s\n", version.GetCommit())
+		fmt.Printf("- Build Date: %s\n", version.GetBuildDate())
+	}
+	
 	fmt.Printf("- Go version: %s\n", runtime.Version())
 	fmt.Printf("- OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 }

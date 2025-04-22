@@ -16,7 +16,7 @@ builds:
       - arm64
     main: ./cmd/envi
     ldflags:
-      - -s -w -X github.com/dexterity-inc/envi/internal/version.Version={{.Version}}
+      - -s -w -X github.com/dexterity-inc/envi/internal/version.Version={{.Version}} -X github.com/dexterity-inc/envi/internal/version.Commit={{.Commit}} -X github.com/dexterity-inc/envi/internal/version.BuildDate={{.Date}}
     binary: envi
 
 archives:

@@ -283,7 +283,27 @@ Install-ChocolateyZipPackage $packageName $url64 $toolsDir -checksum64 $checksum
 ```bash
 git clone https://github.com/dexterity-inc/envi.git
 cd envi
+
+# Using Make (recommended - includes version information)
+make build
+
+# Or using Go directly
 go build -o envi ./cmd/envi
+```
+
+### Building with Version Information
+
+The `version` command displays the current version, build date, and commit hash. This information is set during the build process:
+
+```bash
+# For GoReleaser (automatic during release)
+goreleaser build --single-target --snapshot
+
+# For manual builds (using Make)
+make build
+
+# Verify the version information
+./bin/envi version
 ```
 
 ## License
