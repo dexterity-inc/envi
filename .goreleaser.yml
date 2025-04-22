@@ -49,6 +49,7 @@ brews:
     commit_author:
       name: goreleaserbot
       email: goreleaser@dexterity-inc
+    directory: Formula
     homepage: https://github.com/dexterity-inc/envi
     description: "CLI tool to push and pull .env files to/from GitHub Gists"
     license: "MIT"
