@@ -57,7 +57,7 @@ brews:
       - name: go
         type: build
     install: |
-      system "go", "build", *std_go_args
+      bin.install "envi"
     test: |
       assert_match "environment variable management", shell_output("#{bin}/envi --help")
     caveats: |
