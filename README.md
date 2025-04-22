@@ -90,6 +90,8 @@ envi pull --id GIST_ID
 - `envi share`: Share .env files with team members
 - `envi validate`: Validate .env file format and required variables
 - `envi merge`: Merge multiple .env files with conflict resolution
+- `envi version`: Display version information and build details
+- `envi completion`: Generate shell completion scripts for better CLI experience
 
 ## Advanced Usage
 
@@ -147,6 +149,26 @@ envi merge --files .env.defaults,.env.custom --overwrite
 # Output to a different file and sort variables
 envi merge --files .env.base,.env.test --output .env.combined --sort
 ```
+
+### Shell Completion
+
+Enable tab-completion for Envi commands in your terminal:
+
+```bash
+# Bash
+source <(envi completion bash)
+
+# Zsh
+source <(envi completion zsh)
+
+# Fish
+envi completion fish | source
+
+# PowerShell
+envi completion powershell | Out-String | Invoke-Expression
+```
+
+For permanent installation, see the help with `envi completion --help`.
 
 ## Package Distribution
 
