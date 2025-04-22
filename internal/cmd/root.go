@@ -9,10 +9,21 @@ import (
 
 // Root command definition
 var rootCmd = &cobra.Command{
-	Use:   "envi",
-	Short: "Manage environment variables with GitHub Gists",
-	Long:  `Envi is a secure tool for storing and sharing .env files via GitHub Gists.`,
+	Use:     "envi",
+	Short:   "Manage environment variables with GitHub Gists",
+	Long:    `Envi is a secure tool for storing and sharing .env files via GitHub Gists.`,
 	Version: version.Version,
+	
+	// This will run before the main command execution
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Check if the version flag was used
+		if cmd.Flag("version") != nil && cmd.Flag("version").Changed {
+			displayVersion()
+			// Call os.Exit(0) to prevent the Run function from executing
+			cobra.CheckErr(nil)
+		}
+	},
+	
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help by default when no subcommand is provided
 		cmd.Help()

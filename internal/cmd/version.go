@@ -4,19 +4,10 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/spf13/cobra"
 	"github.com/dexterity-inc/envi/internal/version"
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Display version information",
-	Long:  `Display the version number and build information for Envi CLI.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		displayVersion()
-	},
-}
-
+// displayVersion prints the version information
 func displayVersion() {
 	fmt.Printf("Envi CLI v%s\n", version.GetVersion())
 	
@@ -30,7 +21,15 @@ func displayVersion() {
 	fmt.Printf("- OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 }
 
-// InitVersionCommand initializes the version command
+// InitVersionCommand initializes the version flags
 func InitVersionCommand() {
-	rootCmd.AddCommand(versionCmd)
+	// We don't need a separate version command as Cobra already provides
+	// --version flag. This function is kept for consistency in command initialization.
+	
+	// Add a custom -v short flag for version
+	rootCmd.Flags().BoolP("version", "v", false, "Display version information")
+	
+	// Override the default version template to use our custom version display
+	rootCmd.SetVersionTemplate(`{{.Name}} version {{.Version}}
+`)
 } 
