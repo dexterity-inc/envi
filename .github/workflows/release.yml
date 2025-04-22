@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,25 +29,17 @@ jobs:
 
       - name: Commit changes if needed
         run: |
-          if [[ -n $(git status -s) ]]; then
+          if ($(git status --porcelain).Length -gt 0) {
             git config --global user.email "github-actions@github.com"
             git config --global user.name "GitHub Actions"
             git add go.mod go.sum
-            git commit -m "chore: update go.mod and go.sum" || echo "No changes to commit"
+            git commit -m "chore: update go.mod and go.sum"
             
             # Force update the tag to point to the new commit
-            git tag -f ${GITHUB_REF#refs/tags/}
-            git push --force origin ${GITHUB_REF#refs/tags/}
-          fi
-
-      - name: Install Chocolatey
-        run: |
-          # Install Chocolatey
-          curl -fsSL https://chocolatey.org/install.sh | sudo bash
-          # Make sure choco is in the PATH
-          echo "::add-path::/usr/local/bin"
-          # Verify installation
-          choco --version
+            git tag -f ${env:GITHUB_REF_NAME}
+            git push --force origin ${env:GITHUB_REF_NAME}
+          }
+        shell: pwsh
 
       - name: Validate GoReleaser Config
         uses: goreleaser/goreleaser-action@v5
