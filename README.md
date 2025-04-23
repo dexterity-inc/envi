@@ -16,10 +16,6 @@ Envi is a CLI tool for securely managing and sharing environment variables using
 ```bash
 # Install from the official tap
 brew install dexterity-inc/tap/envi
-
-# Or, tap first and then install
-brew tap dexterity-inc/tap
-brew install envi
 ```
 
 ### Windows Package Managers
