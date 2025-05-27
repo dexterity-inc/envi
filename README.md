@@ -2,6 +2,9 @@
 
 Envi is a CLI tool for securely managing and sharing environment variables using GitHub Gists.
 
+![937e971255e182a6dea94ac3c90af0f1fe79bb42d3b47127a8f300c0a1d94c59](https://github.com/user-attachments/assets/e3e77c72-94dd-4964-900a-9f93a5e48596)
+
+
 ## Features
 
 - ✅ **Store Securely**: Store your `.env` files in private GitHub Gists
