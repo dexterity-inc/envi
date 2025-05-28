@@ -164,6 +164,7 @@ Push your .env file to a new or existing GitHub Gist with optional encryption.
 | `-p, --public`             | Make the Gist public (default private)                                       |
 | `-d, --description string` | Description for the Gist (default "Environment variables created with envi") |
 | `-a, --auto`               | Auto-generate a sample .env file if none exists                              |
+| `--auto-desc`              | Auto-generate description based on project name (default true)               |
 
 **Examples**:
 
@@ -179,6 +180,9 @@ envi push -i YOUR_GIST_ID
 
 # Push as a public Gist
 envi push -p
+
+# Disable auto-description
+envi push --auto-desc=false
 ```
 
 ### pull
@@ -230,6 +234,8 @@ Share your .env file with team members by creating a shared Gist or generating a
 | `-r, --readonly`      | Share with read-only access (default true)        |
 | `-l, --url`           | Generate a shareable URL                          |
 | `-e, --expiry int`    | Expiry time for shareable URL in days (default 7) |
+| `--generate-key`      | Generate a key file for encryption                |
+| `--key-output string` | Output path for generated key file                |
 
 **Examples**:
 
@@ -242,6 +248,12 @@ envi share -i YOUR_GIST_ID -l
 
 # Set URL expiry to 14 days
 envi share -i YOUR_GIST_ID -l -e 14
+
+# Generate and use a key file for sharing
+envi share -i YOUR_GIST_ID -u user1,user2 --generate-key
+
+# Generate a key file with custom path
+envi share -i YOUR_GIST_ID -l --generate-key --key-output my-project-key.key
 ```
 
 ### merge

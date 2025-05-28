@@ -357,4 +357,23 @@ func getKeyFromFile() ([]byte, error) {
 func hashPassword(password string) []byte {
 	hash := sha256.Sum256([]byte(password))
 	return hash[:]
+}
+
+// GenerateKeyFile creates a new encryption key file with random data
+func GenerateKeyFile(keyFilePath string) error {
+	// Generate a random key
+	key := make([]byte, EncryptionKeyLength)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return fmt.Errorf("failed to generate random key: %w", err)
+	}
+	
+	// Encode as base64 for easier handling
+	encodedKey := base64.StdEncoding.EncodeToString(key)
+	
+	// Create the key file with secure permissions
+	if err := os.WriteFile(keyFilePath, []byte(encodedKey), 0600); err != nil {
+		return fmt.Errorf("failed to write key file: %w", err)
+	}
+	
+	return nil
 } 

@@ -79,6 +79,7 @@ envi pull --id GIST_ID
 - **Masked Encryption**: Keep variable names visible but encrypt values (default)
 - **Full Encryption**: Encrypt the entire .env file
 - **Key-based Encryption**: Use a key file for enhanced security
+- **Auto-Description**: Automatically generate descriptive Gist names based on your project
 
 ## Core Commands
 
@@ -102,6 +103,15 @@ envi push
 # Push with full encryption
 envi push --encrypt
 
+# Push with custom description
+envi push --description "My custom description"
+
+# Push with auto-generated description (default)
+envi push --auto-desc
+
+# Disable auto-description
+envi push --auto-desc=false
+
 # Pull encrypted values and decrypt them
 envi pull --unmask
 
@@ -117,6 +127,12 @@ envi share --users user1,user2
 
 # Generate a shareable URL
 envi share --url
+
+# Generate a key file when sharing for enhanced security
+envi share --users user1,user2 --generate-key
+
+# Share with URL and key file (recipient needs both to decrypt)
+envi share --url --generate-key
 ```
 
 ### Validating .env Files

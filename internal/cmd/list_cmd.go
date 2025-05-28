@@ -185,8 +185,8 @@ func runListCommand(cmd *cobra.Command, args []string) {
 			desc := "No description"
 			if gist.Description != nil && *gist.Description != "" {
 				desc = *gist.Description
-				if len(desc) > 40 {
-					desc = desc[:37] + "..."
+				if len(desc) > 60 {
+					desc = desc[:57] + "..."
 				}
 			}
 			
