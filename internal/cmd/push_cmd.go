@@ -3,6 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/google/go-github/v37/github"
 	"github.com/spf13/cobra"
@@ -20,6 +24,7 @@ var (
 	pushPublic        bool
 	pushEnvFile       string
 	pushAutoGenerate  bool
+	pushAutoDesc      bool
 )
 
 // pushCmd is the push command
@@ -38,9 +43,92 @@ func InitPushCommand() {
 	pushCmd.Flags().BoolVarP(&pushPublic, "public", "p", false, "Make the Gist public (default private)")
 	pushCmd.Flags().StringVarP(&pushEnvFile, "file", "f", ".env", "Path to the .env file")
 	pushCmd.Flags().BoolVarP(&pushAutoGenerate, "auto", "a", false, "Auto-generate a sample .env file if none exists")
+	pushCmd.Flags().BoolVar(&pushAutoDesc, "auto-desc", true, "Auto-generate description based on project name")
 	
 	// Add the push command to the root command
 	rootCmd.AddCommand(pushCmd)
+}
+
+// generateDescription automatically creates a description based on the project
+func generateDescription(envFile string) string {
+	// Get the env file type (e.g., .env, .env.development, .env.production)
+	envType := filepath.Base(envFile)
+	
+	// Try to get Git repository name
+	projectName := getProjectName()
+	
+	// Format current date
+	currentDate := time.Now().Format("2006-01-02")
+	
+	// Create a formatted description
+	if projectName != "" {
+		// If env type is just ".env", don't add environment type to description
+		if envType == ".env" {
+			return fmt.Sprintf("Environment variables for %s (%s)", projectName, currentDate)
+		}
+		
+		// For specific env types like .env.development, .env.production, etc.
+		// Extract environment type from filename
+		envSuffix := strings.TrimPrefix(envType, ".env")
+		if envSuffix != "" {
+			if strings.HasPrefix(envSuffix, ".") {
+				envSuffix = strings.TrimPrefix(envSuffix, ".")
+			}
+			return fmt.Sprintf("%s environment for %s (%s)", 
+				strings.Title(envSuffix), projectName, currentDate)
+		}
+		
+		return fmt.Sprintf("Environment variables for %s (%s)", projectName, currentDate)
+	}
+	
+	// Fallback description
+	return fmt.Sprintf("Environment variables created with envi (%s)", currentDate)
+}
+
+// getProjectName tries to get the project name from git or directory name
+func getProjectName() string {
+	// Try to get git repository name
+	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
+	output, err := cmd.Output()
+	
+	if err == nil && len(output) > 0 {
+		// Parse Git remote URL to extract repo name
+		repoURL := strings.TrimSpace(string(output))
+		
+		// Handle SSH URL format (git@github.com:user/repo.git)
+		if strings.HasPrefix(repoURL, "git@") {
+			parts := strings.Split(repoURL, ":")
+			if len(parts) > 1 {
+				repoPath := parts[1]
+				// Remove .git suffix if present
+				repoPath = strings.TrimSuffix(repoPath, ".git")
+				// Get the last part (repo name)
+				pathParts := strings.Split(repoPath, "/")
+				if len(pathParts) > 0 {
+					return pathParts[len(pathParts)-1]
+				}
+			}
+		}
+		
+		// Handle HTTPS URL format (https://github.com/user/repo.git)
+		if strings.HasPrefix(repoURL, "http") {
+			parts := strings.Split(repoURL, "/")
+			if len(parts) > 0 {
+				repoName := parts[len(parts)-1]
+				// Remove .git suffix if present
+				return strings.TrimSuffix(repoName, ".git")
+			}
+		}
+	}
+	
+	// If git failed, use current directory name
+	pwd, err := os.Getwd()
+	if err == nil {
+		return filepath.Base(pwd)
+	}
+	
+	// If all else fails, return empty string
+	return ""
 }
 
 // runPushCommand handles the push command execution
@@ -83,6 +171,12 @@ func runPushCommand(cmd *cobra.Command, args []string) {
 			fmt.Println("Create the file first or use --auto to generate a sample")
 			os.Exit(1)
 		}
+	}
+	
+	// Generate auto description if enabled and no description specified manually
+	if pushAutoDesc && !cmd.Flags().Changed("description") {
+		pushDescription = generateDescription(pushEnvFile)
+		fmt.Printf("Using auto-generated description: %s\n", pushDescription)
 	}
 	
 	// Read .env file
@@ -200,8 +294,8 @@ func runPushCommand(cmd *cobra.Command, args []string) {
 			}
 		}
 		
-		// Update Gist description if provided
-		if pushDescription != "Environment variables created with envi" && cmd.Flags().Changed("description") {
+		// Update Gist description if provided or auto-generated
+		if cmd.Flags().Changed("description") || pushAutoDesc {
 			gist.Description = github.String(pushDescription)
 		}
 		
@@ -249,24 +343,25 @@ func createReadmeContent(fullEncryption, maskedEncryption bool) string {
 		"# Or download directly\n" +
 		"curl -sSL https://github.com/dexterity-inc/envi/releases/latest/download/envi-$(uname -s)-$(uname -m) -o /usr/local/bin/envi\n" +
 		"chmod +x /usr/local/bin/envi\n" +
-		"```\n\n" +
-		"Learn more at https://github.com/dexterity-inc/envi\n"
+		"\n" +
+		"# Windows (via Scoop)\n" +
+		"scoop bucket add dexterity-inc https://github.com/dexterity-inc/scoop-bucket\n" +
+		"scoop install envi\n" +
+		"```\n"
 	
 	return readme
 }
 
-// applyEncryptionDefaults applies default encryption settings from config
+// applyEncryptionDefaults applies encryption defaults from config
 func applyEncryptionDefaults(cmd *cobra.Command, cfg *config.Config) {
-	// Apply default encryption settings if not explicitly set by flags
+	// Apply config defaults if not explicitly set
 	if !cmd.Flags().Changed("encrypt") && !cmd.Flags().Changed("mask") && cfg.EncryptByDefault {
 		if cfg.UseMaskedEncryption {
 			encryption.UseMaskedEncryption = true
-			encryption.UseEncryption = false
-			fmt.Println("Using default setting: Masked encryption enabled")
+			fmt.Println("Using default setting: Masking values in .env file (variable names visible)")
 		} else {
 			encryption.UseEncryption = true
-			encryption.UseMaskedEncryption = false
-			fmt.Println("Using default setting: Full encryption enabled")
+			fmt.Println("Using default setting: Fully encrypting .env file")
 		}
 	}
 	

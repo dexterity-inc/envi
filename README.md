@@ -2,6 +2,9 @@
 
 Envi is a CLI tool for securely managing and sharing environment variables using GitHub Gists.
 
+![937e971255e182a6dea94ac3c90af0f1fe79bb42d3b47127a8f300c0a1d94c59](https://github.com/user-attachments/assets/e3e77c72-94dd-4964-900a-9f93a5e48596)
+
+
 ## Features
 
 - ✅ **Store Securely**: Store your `.env` files in private GitHub Gists
@@ -76,6 +79,7 @@ envi pull --id GIST_ID
 - **Masked Encryption**: Keep variable names visible but encrypt values (default)
 - **Full Encryption**: Encrypt the entire .env file
 - **Key-based Encryption**: Use a key file for enhanced security
+- **Auto-Description**: Automatically generate descriptive Gist names based on your project
 
 ## Core Commands
 
@@ -99,6 +103,15 @@ envi push
 # Push with full encryption
 envi push --encrypt
 
+# Push with custom description
+envi push --description "My custom description"
+
+# Push with auto-generated description (default)
+envi push --auto-desc
+
+# Disable auto-description
+envi push --auto-desc=false
+
 # Pull encrypted values and decrypt them
 envi pull --unmask
 
@@ -114,6 +127,12 @@ envi share --users user1,user2
 
 # Generate a shareable URL
 envi share --url
+
+# Generate a key file when sharing for enhanced security
+envi share --users user1,user2 --generate-key
+
+# Share with URL and key file (recipient needs both to decrypt)
+envi share --url --generate-key
 ```
 
 ### Validating .env Files

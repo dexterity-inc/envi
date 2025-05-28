@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,11 +19,13 @@ import (
 
 // Share command flags
 var (
-	shareGistID        string
-	shareWithUsers     []string
-	shareReadOnlyAccess bool
-	shareGenerateURL   bool
-	shareExpiryInDays  int
+	shareGistID           string
+	shareWithUsers        []string
+	shareReadOnlyAccess   bool
+	shareGenerateURL      bool
+	shareExpiryInDays     int
+	shareGenerateKeyFile  bool
+	shareOutputKeyFile    string
 )
 
 // shareCmd is the share command
@@ -41,6 +44,8 @@ func InitShareCommand() {
 	shareCmd.Flags().BoolVarP(&shareReadOnlyAccess, "readonly", "r", true, "Share with read-only access")
 	shareCmd.Flags().BoolVarP(&shareGenerateURL, "url", "l", false, "Generate a shareable URL")
 	shareCmd.Flags().IntVarP(&shareExpiryInDays, "expiry", "e", 7, "Expiry time for shareable URL in days")
+	shareCmd.Flags().BoolVar(&shareGenerateKeyFile, "generate-key", false, "Generate a key file for encryption")
+	shareCmd.Flags().StringVar(&shareOutputKeyFile, "key-output", "", "Output path for generated key file (default: .envi-share.key)")
 	
 	// Add the share command to the root command
 	rootCmd.AddCommand(shareCmd)
@@ -65,6 +70,23 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 	
 	// Get Gist ID (from flag or config)
 	gistID := getGistID(cfg)
+	
+	// Generate key file if requested
+	var keyFilePath string
+	if shareGenerateKeyFile {
+		keyFilePath, err = generateKeyFileForSharing()
+		if err != nil {
+			fmt.Printf("Error generating key file: %s\n", err)
+			os.Exit(1)
+		}
+		
+		// Force encryption with key file when generating a key
+		encryption.UseEncryption = true
+		encryption.UseKeyFile = true
+		encryption.EncryptionKeyFile = keyFilePath
+		
+		fmt.Printf("Using generated key file: %s\n", keyFilePath)
+	}
 	
 	// Prepare environment content if needed
 	envContent, err := prepareEnvContent()
@@ -94,12 +116,12 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 	
 	// Handle sharing with users if specified
 	if len(shareWithUsers) > 0 {
-		shareWithGitHubUsers(client, user, gist, envContent)
+		shareWithGitHubUsers(client, user, gist, envContent, keyFilePath)
 	}
 	
 	// Generate shareable URL if requested
 	if shareGenerateURL {
-		generateAndShowURL(client, user, gist)
+		generateAndShowURL(client, user, gist, keyFilePath)
 	}
 	
 	// If neither option was selected, show help
@@ -107,6 +129,31 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 		fmt.Println("Please specify either users to share with (--users) or request a shareable URL (--url)")
 		fmt.Println("Run 'envi share --help' for usage information")
 	}
+}
+
+// generateKeyFileForSharing creates a key file for sharing
+func generateKeyFileForSharing() (string, error) {
+	// Determine key file path
+	keyFilePath := ".envi-share.key"
+	if shareOutputKeyFile != "" {
+		keyFilePath = shareOutputKeyFile
+	} else {
+		// Generate a unique filename with timestamp
+		timestamp := time.Now().Format("20060102-150405")
+		keyFilePath = fmt.Sprintf(".envi-share-%s.key", timestamp)
+	}
+	
+	// Generate the key file
+	err := encryption.GenerateKeyFile(keyFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate key file: %w", err)
+	}
+	
+	fmt.Printf("Generated key file: %s\n", keyFilePath)
+	fmt.Println("IMPORTANT: Share this key file securely with the recipient.")
+	fmt.Println("Without this key file, they won't be able to decrypt the environment variables.")
+	
+	return keyFilePath, nil
 }
 
 // getGistID gets the Gist ID from flag or config
@@ -169,7 +216,7 @@ func prepareEnvContent() ([]byte, error) {
 }
 
 // shareWithGitHubUsers shares env with specified GitHub users
-func shareWithGitHubUsers(client *github.Client, user *github.User, gist *github.Gist, envContent []byte) {
+func shareWithGitHubUsers(client *github.Client, user *github.User, gist *github.Gist, envContent []byte, keyFilePath string) {
 	fmt.Printf("Sharing .env with users: %s\n", strings.Join(shareWithUsers, ", "))
 	
 	ctx := context.Background()
@@ -196,7 +243,7 @@ func shareWithGitHubUsers(client *github.Client, user *github.User, gist *github
 		}
 		
 		// Add README with instructions
-		readmeContent := createSharingReadmeContent(user, username)
+		readmeContent := createSharingReadmeContent(user, username, keyFilePath)
 		newGist.Files[github.GistFilename("README.md")] = github.GistFile{
 			Content: github.String(readmeContent),
 		}
@@ -209,11 +256,16 @@ func shareWithGitHubUsers(client *github.Client, user *github.User, gist *github
 		}
 		
 		fmt.Printf("Successfully shared with %s: https://gist.github.com/%s\n", username, *createdGist.ID)
+		
+		if keyFilePath != "" {
+			fmt.Printf("REMINDER: Don't forget to share the key file (%s) with %s through a secure channel.\n", 
+				filepath.Base(keyFilePath), username)
+		}
 	}
 }
 
 // generateAndShowURL creates and displays a shareable URL
-func generateAndShowURL(client *github.Client, user *github.User, gist *github.Gist) {
+func generateAndShowURL(client *github.Client, user *github.User, gist *github.Gist, keyFilePath string) {
 	fmt.Println("Generating shareable URL...")
 	
 	// Calculate expiry date
@@ -224,6 +276,13 @@ func generateAndShowURL(client *github.Client, user *github.User, gist *github.G
 	sharingMessage := fmt.Sprintf("Shareable URL will expire on %s\n", expiryStr)
 	sharingMessage += "Anyone with this URL can access your .env file.\n"
 	sharingMessage += fmt.Sprintf("https://gist.github.com/%s\n", *gist.ID)
+	
+	if keyFilePath != "" {
+		sharingMessage += "\n"
+		sharingMessage += fmt.Sprintf("IMPORTANT: You must share the key file (%s) separately through a secure channel.\n", 
+			filepath.Base(keyFilePath))
+		sharingMessage += "Without this key file, recipients won't be able to decrypt the environment variables.\n"
+	}
 	
 	// Display message using TUI if enabled
 	if encryption.UseTUI {
