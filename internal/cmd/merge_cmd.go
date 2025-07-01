@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/dexterity-inc/envi/internal/config"
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/utils"
 )
 
 // Merge command flags
@@ -57,9 +59,9 @@ func InitMergeCommand() {
 func runMergeCommand(cmd *cobra.Command, args []string) {
 	// Check if we're merging with a Gist or local files
 	if mergeGistID == "" && len(mergeFiles) == 0 {
-		fmt.Println("Error: You must specify either local files to merge (--files) or a Gist ID to merge with (--gist)")
-		fmt.Println("Run 'envi merge --help' for usage information")
-		os.Exit(1)
+		utils.Error("You must specify either local files to merge (--files) or a Gist ID to merge with (--gist)")
+		utils.Info("Run 'envi merge --help' for usage information")
+		utils.Fatal("Missing input files")
 	}
 
 	// Create backup if output file exists
@@ -67,9 +69,9 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 		backupFile := fmt.Sprintf("%s.bak.%s", mergeOutput, time.Now().Format("20060102150405"))
 		err := copyFile(mergeOutput, backupFile)
 		if err != nil {
-			fmt.Printf("Warning: Could not create backup file: %s\n", err)
+			utils.Warn("Could not create backup file: %s", err)
 		} else {
-			fmt.Printf("Created backup of existing file at %s\n", backupFile)
+			utils.Info("Created backup of existing file at %s", backupFile)
 		}
 	}
 
@@ -82,27 +84,27 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 	// If merging with a Gist, fetch the remote .env file
 	var remoteContent []byte
 	if mergeGistID != "" {
-		fmt.Printf("Fetching Gist with ID: %s\n", mergeGistID)
-		
+		utils.Info("Fetching Gist with ID: %s", mergeGistID)
+
 		// Get GitHub token
 		token, err := config.GetGitHubToken()
 		if err != nil {
-			fmt.Printf("Error: %s\n", err)
-			os.Exit(1)
+			utils.Error("Error: %s", err)
+			utils.Fatal("Failed to get GitHub token")
 		}
-		
+
 		// Create GitHub client
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 		tc := oauth2.NewClient(cmd.Context(), ts)
 		client := github.NewClient(tc)
-		
+
 		// Get Gist
 		gist, _, err := client.Gists.Get(cmd.Context(), mergeGistID)
 		if err != nil {
-			fmt.Printf("Error retrieving Gist with ID %s: %s\n", mergeGistID, err)
-			os.Exit(1)
+			utils.Error("Error retrieving Gist with ID %s: %s", mergeGistID, err)
+			utils.Fatal("Failed to retrieve Gist")
 		}
-		
+
 		// Find .env file in Gist
 		var envFile *github.GistFile
 		for filename, file := range gist.Files {
@@ -111,86 +113,86 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 				break
 			}
 		}
-		
+
 		if envFile == nil {
-			fmt.Println("Error: No .env file found in this Gist")
-			os.Exit(1)
+			utils.Error("No .env file found in this Gist")
+			utils.Fatal("Missing .env file in Gist")
 		}
-		
+
 		// Get content
 		remoteContent = []byte(*envFile.Content)
-		
+
 		// Check if content is encrypted and needs decryption
 		isEncrypted := encryption.IsEncrypted(remoteContent)
 		isMasked := encryption.IsMasked(remoteContent)
-		
+
 		if (isEncrypted || isMasked) && mergeUnmask {
-			fmt.Println("Detected encrypted content. Attempting to decrypt...")
-			
+			utils.Info("Detected encrypted content. Attempting to decrypt...")
+
 			var decryptedContent []byte
 			var err error
-			
+
 			if isEncrypted {
 				decryptedContent, err = encryption.DecryptContent(remoteContent)
 			} else if isMasked {
 				decryptedContent, err = encryption.UnmaskEnvContent(remoteContent)
 			}
-			
+
 			if err != nil {
-				fmt.Println("Error decrypting content. Please check your encryption settings and try again.")
-				os.Exit(1)
+				utils.Error("Error decrypting content. Please check your encryption settings and try again.")
+				utils.Fatal("Decryption failed")
 			}
-			
+
 			remoteContent = decryptedContent
-			fmt.Println("Successfully decrypted remote content!")
+			utils.Success("Successfully decrypted remote content!")
 		} else if (isEncrypted || isMasked) && !mergeUnmask {
-			fmt.Println("Warning: Remote content is encrypted/masked but --unmask flag not specified.")
-			fmt.Println("Merging encrypted content - this may not be what you want.")
+			utils.Warn("Remote content is encrypted/masked but --unmask flag not specified.")
+			utils.Info("Merging encrypted content - this may not be what you want.")
 		}
-		
+
 		// Save to a temporary file
 		tempFile := ".env.remote.tmp"
 		if err := os.WriteFile(tempFile, remoteContent, 0600); err != nil {
-			fmt.Printf("Error writing temporary file: %s\n", err)
-			os.Exit(1)
+			utils.Error("Error writing temporary file: %s", err)
+			utils.Fatal("Failed to write temporary file")
 		}
 		defer os.Remove(tempFile) // Clean up temporary file
-		
+
 		// Add to files to process
 		filesToProcess = append(filesToProcess, tempFile)
-		fmt.Println("Remote .env file added to merge")
+		utils.Info("Remote .env file added to merge")
 	}
 
 	// Verify all local files exist
 	for _, file := range filesToProcess {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
-			fmt.Printf("Error: .env file not found at %s\n", file)
-			os.Exit(1)
+			utils.Error(".env file not found at %s", file)
+			utils.Fatal("File not found")
 		}
 	}
 
 	// Process each file
 	for _, file := range filesToProcess {
-		fmt.Printf("Processing file: %s\n", file)
-		
+		utils.Info("Processing file: %s", file)
+
 		// Open file
 		f, err := os.Open(file)
 		if err != nil {
-			fmt.Printf("Error opening file %s: %s\n", file, err)
-			os.Exit(1)
+			utils.Error("Error opening file %s: %s", file, err)
+			utils.Fatal("Failed to open file")
 		}
-		
+
 		// Read file line by line
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := scanner.Text()
 			trimmedLine := strings.TrimSpace(line)
-			
+
 			// Handle empty lines
 			if trimmedLine == "" {
 				continue
 			}
-			
+
 			// Handle comments
 			if strings.HasPrefix(trimmedLine, "#") {
 				if mergeKeepComments {
@@ -198,31 +200,27 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 				}
 				continue
 			}
-			
-			// Handle environment variables (KEY=value)
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				key := parts[0]
-				value := parts[1]
-				
-				// Check for duplicates
-				_, exists := variables[key]
-				if exists {
-					// Handling duplicates differently based on whether this is from Gist
-					isRemoteFile := file == ".env.remote.tmp"
-					
-					if mergeOverwrite && isRemoteFile {
-						// If we're overwriting and this is the remote file, it takes precedence
-						fmt.Printf("Overwriting with remote value for variable: %s\n", key)
+
+			// Handle environment variables
+			if strings.Contains(trimmedLine, "=") {
+				parts := strings.SplitN(trimmedLine, "=", 2)
+				key := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+
+				// Handle duplicate keys based on flags
+				if existingValue, exists := variables[key]; exists {
+					if mergeSkipDuplicates {
+						utils.Info("Skipping duplicate key: %s (keeping existing value)", key)
+						continue
+					} else if mergeOverwrite {
+						utils.Info("Overwriting duplicate key: %s (new value: %s)", key, value)
 						variables[key] = value
-					} else if mergeSkipDuplicates && !isRemoteFile {
-						// If we're skipping duplicates and this is a local file, it takes precedence
-						fmt.Printf("Keeping local value for duplicate variable: %s\n", key)
-					} else if !mergeSkipDuplicates && !mergeOverwrite {
-						fmt.Printf("Warning: Duplicate variable found: %s\n", key)
-						fmt.Printf("  Local value: %s\n", variables[key])
-						fmt.Printf("  Remote value: %s\n", value)
-						fmt.Println("Use --overwrite to prefer remote values or --skip-duplicates to prefer local values")
+					} else {
+						utils.Warn("Duplicate key found: %s", key)
+						utils.Info("  Existing: %s", existingValue)
+						utils.Info("  New: %s", value)
+						utils.Info("  Using new value (use --skip-duplicates to keep existing)")
+						variables[key] = value
 					}
 				} else {
 					variables[key] = value
@@ -230,94 +228,63 @@ func runMergeCommand(cmd *cobra.Command, args []string) {
 				}
 			}
 		}
-		
-		f.Close()
-		
-		// Check for scanner errors
+
 		if err := scanner.Err(); err != nil {
-			fmt.Printf("Error reading file %s: %s\n", file, err)
-			os.Exit(1)
+			utils.Error("Error reading file %s: %s", file, err)
+			utils.Fatal("Failed to read file")
 		}
+
+		f.Close()
 	}
 
-	// Create output file
-	outFile, err := os.Create(mergeOutput)
+	// Write merged content to output file
+	output, err := os.Create(mergeOutput)
 	if err != nil {
-		fmt.Printf("Error creating output file: %s\n", err)
-		os.Exit(1)
+		utils.Error("Error creating output file: %s", err)
+		utils.Fatal("Failed to create output file")
 	}
-	defer outFile.Close()
+	defer output.Close()
 
-	// Write merged content
-	writer := bufio.NewWriter(outFile)
-	
-	// Add a header comment
-	fmt.Fprintf(writer, "# .env file created by envi merge\n")
-	fmt.Fprintf(writer, "# Created on %s\n", time.Now().Format("2006-01-02 15:04:05"))
-	
-	if mergeGistID != "" {
-		fmt.Fprintf(writer, "# Merged local .env with remote Gist: %s\n", mergeGistID)
-	} else {
-		fmt.Fprintf(writer, "# Merged from %d files: %s\n", len(filesToProcess), strings.Join(filesToProcess, ", "))
+	// Write comments first
+	for _, comment := range comments {
+		output.WriteString(comment + "\n")
 	}
-	fmt.Fprintln(writer, "")
-	
-	// Write comments if keeping them
-	if mergeKeepComments && len(comments) > 0 {
-		fmt.Fprintf(writer, "# Merged comments from source files:\n")
-		for _, comment := range comments {
-			fmt.Fprintln(writer, comment)
-		}
-		fmt.Fprintln(writer, "")
-	}
-	
+
 	// Write variables
+	var keysToWrite []string
 	if mergeSort {
-		// Sort variables alphabetically
-		sortedKeys := sortKeys(variables)
-		for _, key := range sortedKeys {
-			fmt.Fprintf(writer, "%s=%s\n", key, variables[key])
-		}
+		keysToWrite = sortKeys(variables)
 	} else {
-		// Use original order
-		for _, key := range variableOrder {
-			fmt.Fprintf(writer, "%s=%s\n", key, variables[key])
-		}
+		keysToWrite = variableOrder
 	}
-	
-	writer.Flush()
-	
-	fmt.Printf("Successfully merged .env files into %s\n", mergeOutput)
-	fmt.Printf("Merged %d variables\n", len(variables))
+
+	for _, key := range keysToWrite {
+		output.WriteString(fmt.Sprintf("%s=%s\n", key, variables[key]))
+	}
+
+	utils.Success("Successfully merged %d files into %s", len(filesToProcess), mergeOutput)
+	utils.Info("Total variables: %d", len(variables))
 }
 
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
-	// Read source file
-	sourceData, err := os.ReadFile(src)
+	input, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	
-	// Create destination file
-	return os.WriteFile(dst, sourceData, 0600)
+
+	return os.WriteFile(dst, input, 0600)
 }
 
-// sortKeys returns the keys of a map in alphabetical order
+// sortKeys returns a sorted slice of map keys
 func sortKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	
-	// Simple bubble sort for alphabetical ordering
-	for i := 0; i < len(keys)-1; i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[i] > keys[j] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
-	
+
+	// Use Go's efficient built-in sort algorithm instead of bubble sort
+	sort.Strings(keys)
+
 	return keys
-} 
+}
