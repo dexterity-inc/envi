@@ -4,7 +4,6 @@ Envi is a CLI tool for securely managing and sharing environment variables using
 
 ![937e971255e182a6dea94ac3c90af0f1fe79bb42d3b47127a8f300c0a1d94c59](https://github.com/user-attachments/assets/e3e77c72-94dd-4964-900a-9f93a5e48596)
 
-
 ## Features
 
 - ✅ **Store Securely**: Store your `.env` files in private GitHub Gists
@@ -55,19 +54,38 @@ Download the latest binary from the [releases page](https://github.com/dexterity
 
 ## Quick Start
 
-1. Configure your GitHub token (needs Gist scope):
+1. **Create a GitHub Personal Access Token with required permissions:**
+
+   **Required Permissions:**
+
+   - `gist` (Full control of private gists)
+   - `repo` (Full control of private repositories) - for project detection
+
+   **Steps:**
+
+   1. Go to [GitHub.com → Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
+   2. Click "Generate new token (classic)"
+   3. Give it a descriptive name (e.g., "Envi CLI")
+   4. Set expiration as needed
+   5. Select the required scopes:
+      - ✅ gist (Full control of private gists)
+      - ✅ repo (Full control of private repositories)
+   6. Click "Generate token"
+   7. Copy the token (you won't see it again!)
+
+2. **Configure your GitHub token:**
 
 ```bash
 envi config --token YOUR_GITHUB_TOKEN
 ```
 
-2. Push your .env file to a private Gist:
+3. **Push your .env file to a private Gist:**
 
 ```bash
 envi push
 ```
 
-3. Pull your .env file on another machine:
+4. **Pull your .env file on another machine:**
 
 ```bash
 envi pull --id GIST_ID
