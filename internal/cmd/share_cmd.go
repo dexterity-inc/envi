@@ -331,7 +331,7 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 		sharePass = generateSecurePassword()
 		fmt.Println("Generated a secure password for sharing.")
 		fmt.Println("IMPORTANT: Save this password securely - it's needed to decrypt the shared content!")
-		fmt.Printf("Password: %s\n", sharePass)
+		fmt.Println("Password has been generated. Please save it securely.")
 	} else if sharePassword != "" {
 		sharePass = sharePassword
 	} else {
