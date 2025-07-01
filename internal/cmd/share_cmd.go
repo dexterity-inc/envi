@@ -407,20 +407,20 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 	// Display success message
 	sharingMessage := fmt.Sprintf("✅ Self-contained encrypted share created successfully!\n\n")
 	sharingMessage += fmt.Sprintf("🔗 Shareable URL: https://gist.github.com/%s\n", *createdGist.ID)
-	sharingMessage += fmt.Sprintf("🔑 Password: %s\n\n", sharePass)
 	sharingMessage += "📋 Instructions for recipients:\n"
 	sharingMessage += "1. Visit the URL above\n"
 	sharingMessage += "2. Copy the .env file content\n"
 	sharingMessage += "3. Run: envi pull --self-contained --share-password <password>\n"
 	sharingMessage += "4. Paste the content when prompted\n\n"
 	sharingMessage += "💡 This share is completely self-contained - no separate key files needed!"
+	fmt.Println("IMPORTANT: Save the password securely - it's needed to decrypt the shared content!")
 
 	if encryption.UseTUI {
 		tui.ShowSuccess("Self-Contained Share Created", []string{
 			fmt.Sprintf("Shareable URL: https://gist.github.com/%s", *createdGist.ID),
-			fmt.Sprintf("Password: %s", sharePass),
 			"Recipients can use: envi pull --self-contained --share-password <password>",
 			"No separate key files needed!",
+			"IMPORTANT: Save the password securely - it's needed to decrypt the shared content!",
 		})
 	} else {
 		fmt.Println(sharingMessage)
