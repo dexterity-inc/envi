@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v37/github"
 	"github.com/spf13/cobra"
@@ -14,75 +14,53 @@ import (
 
 	"github.com/dexterity-inc/envi/internal/config"
 	"github.com/dexterity-inc/envi/internal/encryption"
-	"github.com/dexterity-inc/envi/internal/tui"
+	"github.com/dexterity-inc/envi/internal/utils"
 )
 
 // Push command flags
 var (
-	pushGistID        string
-	pushDescription   string
-	pushPublic        bool
-	pushEnvFile       string
-	pushAutoGenerate  bool
-	pushAutoDesc      bool
+	pushEnvFile      string
+	pushGistID       string
+	pushDescription  string
+	pushPublic       bool
+	pushForce        bool
+	pushAutoGenerate bool
+	pushAutoDesc     bool
 )
 
 // pushCmd is the push command
 var pushCmd = &cobra.Command{
 	Use:   "push",
 	Short: "Push .env file to GitHub Gist",
-	Long:  `Push your .env file to a new or existing GitHub Gist with optional encryption.`,
+	Long:  `Push your .env file to a GitHub Gist for secure storage and sharing.`,
 	Run:   runPushCommand,
 }
 
 // InitPushCommand sets up the push command and its subcommands
 func InitPushCommand() {
 	// Initialize the command flags
-	pushCmd.Flags().StringVarP(&pushGistID, "id", "i", "", "GitHub Gist ID to update (leave blank for new Gist)")
-	pushCmd.Flags().StringVarP(&pushDescription, "description", "d", "Environment variables created with envi", "Description for the Gist")
-	pushCmd.Flags().BoolVarP(&pushPublic, "public", "p", false, "Make the Gist public (default private)")
-	pushCmd.Flags().StringVarP(&pushEnvFile, "file", "f", ".env", "Path to the .env file")
-	pushCmd.Flags().BoolVarP(&pushAutoGenerate, "auto", "a", false, "Auto-generate a sample .env file if none exists")
-	pushCmd.Flags().BoolVar(&pushAutoDesc, "auto-desc", true, "Auto-generate description based on project name")
-	
+	pushCmd.Flags().StringVarP(&pushEnvFile, "file", "f", ".env", "Path to .env file")
+	pushCmd.Flags().StringVarP(&pushGistID, "id", "i", "", "Gist ID to update (if not specified, creates new Gist)")
+	pushCmd.Flags().StringVarP(&pushDescription, "description", "d", "", "Description for the Gist")
+	pushCmd.Flags().BoolVarP(&pushPublic, "public", "p", false, "Make Gist public")
+	pushCmd.Flags().BoolVar(&pushForce, "force", false, "Force push without confirmation")
+	pushCmd.Flags().BoolVar(&pushAutoGenerate, "auto", false, "Auto-generate .env file if it doesn't exist")
+	pushCmd.Flags().BoolVar(&pushAutoDesc, "auto-desc", false, "Auto-generate description from .env file")
+
 	// Add the push command to the root command
 	rootCmd.AddCommand(pushCmd)
 }
 
 // generateDescription automatically creates a description based on the project
 func generateDescription(envFile string) string {
-	// Get the env file type (e.g., .env, .env.development, .env.production)
-	envType := filepath.Base(envFile)
-	
 	// Try to get Git repository name
 	projectName := getProjectName()
-	
-	// Format current date
-	currentDate := time.Now().Format("2006-01-02")
-	
-	// Create a formatted description
-	if projectName != "" {
-		// If env type is just ".env", don't add environment type to description
-		if envType == ".env" {
-			return fmt.Sprintf("Environment variables for %s (%s)", projectName, currentDate)
-		}
-		
-		// For specific env types like .env.development, .env.production, etc.
-		// Extract environment type from filename
-		envSuffix := strings.TrimPrefix(envType, ".env")
-		if envSuffix != "" {
-			if strings.HasPrefix(envSuffix, ".") {
-				envSuffix = strings.TrimPrefix(envSuffix, ".")
-			}
-			return fmt.Sprintf("%s environment for %s (%s)", 
-				strings.Title(envSuffix), projectName, currentDate)
-		}
-		
-		return fmt.Sprintf("Environment variables for %s (%s)", projectName, currentDate)
-	}
-	
-	// Fallback description
-	return fmt.Sprintf("Environment variables created with envi (%s)", currentDate)
+
+	// Get environment type from filename
+	environment := config.GetEnvironmentFromFilename(envFile)
+
+	// Use enhanced description generation
+	return config.GenerateGistDescription(envFile, projectName, environment, encryption.UseEncryption)
 }
 
 // getProjectName tries to get the project name from git or directory name
@@ -90,11 +68,11 @@ func getProjectName() string {
 	// Try to get git repository name
 	cmd := exec.Command("git", "config", "--get", "remote.origin.url")
 	output, err := cmd.Output()
-	
+
 	if err == nil && len(output) > 0 {
 		// Parse Git remote URL to extract repo name
 		repoURL := strings.TrimSpace(string(output))
-		
+
 		// Handle SSH URL format (git@github.com:user/repo.git)
 		if strings.HasPrefix(repoURL, "git@") {
 			parts := strings.Split(repoURL, ":")
@@ -109,7 +87,7 @@ func getProjectName() string {
 				}
 			}
 		}
-		
+
 		// Handle HTTPS URL format (https://github.com/user/repo.git)
 		if strings.HasPrefix(repoURL, "http") {
 			parts := strings.Split(repoURL, "/")
@@ -120,40 +98,41 @@ func getProjectName() string {
 			}
 		}
 	}
-	
+
 	// If git failed, use current directory name
 	pwd, err := os.Getwd()
 	if err == nil {
 		return filepath.Base(pwd)
 	}
-	
+
 	// If all else fails, return empty string
 	return ""
 }
 
 // runPushCommand handles the push command execution
 func runPushCommand(cmd *cobra.Command, args []string) {
+	logger := utils.GetLogger()
+
 	// Get GitHub token
 	token, err := config.GetGitHubToken()
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		utils.FatalError(err, "getting GitHub token")
 	}
-	
+
 	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		fmt.Printf("Warning: Could not load config: %s\n", err)
+		logger.Warn("Could not load config: %s", err)
 	} else {
 		// Apply encryption defaults if not explicitly set
 		applyEncryptionDefaults(cmd, cfg)
 	}
-	
+
 	// Check if .env file exists
 	if _, err := os.Stat(pushEnvFile); os.IsNotExist(err) {
 		if pushAutoGenerate {
 			// Create a sample .env file
-			fmt.Printf("No .env file found. Creating a sample at %s\n", pushEnvFile)
+			logger.Info("No .env file found. Creating a sample at %s", pushEnvFile)
 			sampleContent := "# Sample .env file created by envi\n" +
 				"# Replace these with your actual environment variables\n\n" +
 				"DB_HOST=localhost\n" +
@@ -161,153 +140,126 @@ func runPushCommand(cmd *cobra.Command, args []string) {
 				"DB_USER=username\n" +
 				"DB_PASSWORD=password\n" +
 				"API_KEY=your_api_key_here\n"
-			
-			if err := os.WriteFile(pushEnvFile, []byte(sampleContent), 0600); err != nil {
-				fmt.Printf("Error creating sample .env file: %s\n", err)
-				os.Exit(1)
+
+			if err := os.WriteFile(pushEnvFile, []byte(sampleContent), utils.EnvFilePerms); err != nil {
+				utils.FatalError(err, "creating sample .env file")
 			}
 		} else {
-			fmt.Printf("Error: .env file not found at %s\n", pushEnvFile)
-			fmt.Println("Create the file first or use --auto to generate a sample")
-			os.Exit(1)
+			utils.FatalMessage(fmt.Sprintf(".env file not found at %s", pushEnvFile), "push")
 		}
 	}
-	
+
 	// Generate auto description if enabled and no description specified manually
 	if pushAutoDesc && !cmd.Flags().Changed("description") {
 		pushDescription = generateDescription(pushEnvFile)
-		fmt.Printf("Using auto-generated description: %s\n", pushDescription)
+		logger.Info("Using auto-generated description: %s", pushDescription)
 	}
-	
+
 	// Read .env file
 	envContent, err := os.ReadFile(pushEnvFile)
 	if err != nil {
-		fmt.Printf("Error reading .env file: %s\n", err)
-		os.Exit(1)
+		utils.FatalError(err, "reading .env file")
 	}
-	
+
 	// Handle encryption options
 	if encryption.UseEncryption && encryption.UseMaskedEncryption {
-		fmt.Println("Warning: Both --encrypt and --mask flags specified. Using --mask (masked encryption).")
+		logger.Warn("Both --encrypt and --mask flags specified. Using --mask (masked encryption).")
 		encryption.UseEncryption = false
 	}
-	
+
 	if encryption.UseEncryption {
-		fmt.Println("Encrypting .env file...")
+		logger.Info("Encrypting .env file...")
 		encryptedContent, err := encryption.EncryptContent(envContent)
 		if err != nil {
-			fmt.Printf("Error encrypting .env file: %s\n", err)
-			os.Exit(1)
+			utils.FatalError(err, "encrypting .env file")
 		}
 		envContent = encryptedContent
-		fmt.Println("Encryption successful.")
+		logger.Success("Encryption successful.")
 	} else if encryption.UseMaskedEncryption {
-		fmt.Println("Masking values in .env file...")
+		logger.Info("Masking values in .env file...")
 		maskedContent, err := encryption.MaskEnvContent(envContent)
 		if err != nil {
-			fmt.Println("Error masking .env file. Please check the input and try again.")
-			os.Exit(1)
+			utils.FatalError(err, "masking .env file")
 		}
 		envContent = maskedContent
-		fmt.Println("Value masking successful. Variable names remain visible.")
+		logger.Success("Value masking successful. Variable names remain visible.")
 	}
-	
+
 	// Create GitHub client
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(cmd.Context(), ts)
 	client := github.NewClient(tc)
-	
+
 	// Get Gist ID (from flag or config)
 	if pushGistID == "" && cfg != nil && cfg.LastGistID != "" {
-		useLastID, err := tui.Confirm("Use saved Gist?", fmt.Sprintf("Would you like to update your last used Gist (%s)?", cfg.LastGistID))
+		useLastID, err := utils.Confirm("Use saved Gist?", fmt.Sprintf("Would you like to update your last used Gist (%s)?", cfg.LastGistID))
 		if err != nil {
-			fmt.Printf("Error getting confirmation: %s\n", err)
-			os.Exit(1)
+			utils.FatalError(err, "getting confirmation")
 		}
-		
+
 		if useLastID {
 			pushGistID = cfg.LastGistID
-			fmt.Printf("Using saved Gist ID: %s\n", pushGistID)
+			logger.Info("Using saved Gist ID: %s", pushGistID)
 		}
 	}
-	
+
 	// Create or update Gist
+	var gist *github.Gist
+	var gistID string
+
 	if pushGistID == "" {
 		// Create new Gist
-		newGist := &github.Gist{
-			Description: github.String(pushDescription),
-			Public:      github.Bool(pushPublic),
-			Files: map[github.GistFilename]github.GistFile{
-				github.GistFilename(".env"): {
-					Content: github.String(string(envContent)),
-				},
-			},
-		}
-		
-		// Add README with instructions if encrypted
-		if encryption.UseEncryption || encryption.UseMaskedEncryption {
-			readmeContent := createReadmeContent(encryption.UseEncryption, encryption.UseMaskedEncryption)
-			newGist.Files[github.GistFilename("README.md")] = github.GistFile{
-				Content: github.String(readmeContent),
-			}
-		}
-		
-		// Create the Gist
-		gist, _, err := client.Gists.Create(cmd.Context(), newGist)
+		logger.Info("Creating new Gist...")
+		gist, err = createNewGist(client, envContent, pushDescription, pushPublic)
 		if err != nil {
-			fmt.Printf("Error creating Gist: %s\n", err)
-			os.Exit(1)
+			utils.FatalError(err, "creating new Gist")
 		}
-		
-		// Save Gist ID in config
-		if cfg != nil {
-			cfg.LastGistID = *gist.ID
-			if err := config.SaveConfig(cfg); err != nil {
-				fmt.Printf("Warning: Could not save Gist ID to config: %s\n", err)
-			}
-		}
-		
-		fmt.Println("Successfully pushed .env to GitHub Gist!")
-		fmt.Printf("Gist URL: https://gist.github.com/%s\n", *gist.ID)
-		fmt.Printf("Gist ID: %s (saved for future use)\n", *gist.ID)
+		gistID = *gist.ID
+		logger.Success("Gist created successfully!")
 	} else {
 		// Update existing Gist
-		// First, get the current Gist to preserve other files
-		gist, _, err := client.Gists.Get(cmd.Context(), pushGistID)
+		logger.Info("Updating existing Gist...")
+		gist, err = updateExistingGist(client, pushGistID, envContent, pushDescription, pushPublic)
 		if err != nil {
-			fmt.Printf("Error retrieving Gist with ID %s: %s\n", pushGistID, err)
-			os.Exit(1)
+			utils.FatalError(err, "updating existing Gist")
 		}
-		
-		// Update the Gist
-		gist.Files = map[github.GistFilename]github.GistFile{
-			github.GistFilename(".env"): {
-				Content: github.String(string(envContent)),
-			},
+		gistID = *gist.ID
+		logger.Success("Gist updated successfully!")
+	}
+
+	// Save Gist ID to config
+	if cfg != nil {
+		cfg.LastGistID = gistID
+
+		// Add to gist history
+		gistInfo := &config.GistInfo{
+			ID:          gistID,
+			Name:        pushDescription,
+			Description: pushDescription,
+			CreatedAt:   gist.CreatedAt.Format(utils.TimeFormatShort),
+			UpdatedAt:   gist.UpdatedAt.Format(utils.TimeFormatShort),
+			IsEncrypted: encryption.UseEncryption || encryption.UseMaskedEncryption,
+			IsPublic:    pushPublic,
+			FileCount:   len(gist.Files),
+			URL:         fmt.Sprintf("https://gist.github.com/%s", gistID),
 		}
-		
-		// Add README with instructions if encrypted
-		if encryption.UseEncryption || encryption.UseMaskedEncryption {
-			readmeContent := createReadmeContent(encryption.UseEncryption, encryption.UseMaskedEncryption)
-			gist.Files[github.GistFilename("README.md")] = github.GistFile{
-				Content: github.String(readmeContent),
-			}
+		cfg.AddGistToHistory(gistInfo)
+
+		if err := config.SaveConfig(cfg); err != nil {
+			logger.Warn("Could not save Gist ID to config: %s", err)
 		}
-		
-		// Update Gist description if provided or auto-generated
-		if cmd.Flags().Changed("description") || pushAutoDesc {
-			gist.Description = github.String(pushDescription)
-		}
-		
-		// Update the Gist
-		_, _, err = client.Gists.Edit(cmd.Context(), pushGistID, gist)
-		if err != nil {
-			fmt.Printf("Error updating Gist: %s\n", err)
-			os.Exit(1)
-		}
-		
-		fmt.Println("Successfully updated .env in GitHub Gist!")
-		fmt.Printf("Gist URL: https://gist.github.com/%s\n", pushGistID)
+	}
+
+	// Display results
+	logger.Info("Gist URL: https://gist.github.com/%s", gistID)
+	if pushPublic {
+		logger.Info("Gist is public and can be accessed by anyone with the URL")
+	} else {
+		logger.Info("Gist is private and only accessible to you")
+	}
+
+	if encryption.UseEncryption || encryption.UseMaskedEncryption {
+		logger.Info("Content is encrypted - keep your encryption key/password secure!")
 	}
 }
 
@@ -315,7 +267,7 @@ func runPushCommand(cmd *cobra.Command, args []string) {
 func createReadmeContent(fullEncryption, maskedEncryption bool) string {
 	readme := "# Environment Variables\n\n" +
 		"This .env file was created with [envi](https://github.com/dexterity-inc/envi).\n\n"
-	
+
 	if fullEncryption {
 		readme += "## Encryption Notice\n\n" +
 			"This .env file is fully encrypted and requires decryption to use.\n\n" +
@@ -333,7 +285,7 @@ func createReadmeContent(fullEncryption, maskedEncryption bool) string {
 			"```\n\n" +
 			"You will need the encryption password or key file that was used to mask the values.\n"
 	}
-	
+
 	readme += "\n## Install envi\n\n" +
 		"```shell\n" +
 		"# macOS/Linux\n" +
@@ -348,7 +300,7 @@ func createReadmeContent(fullEncryption, maskedEncryption bool) string {
 		"scoop bucket add dexterity-inc https://github.com/dexterity-inc/scoop-bucket\n" +
 		"scoop install envi\n" +
 		"```\n"
-	
+
 	return readme
 }
 
@@ -364,14 +316,83 @@ func applyEncryptionDefaults(cmd *cobra.Command, cfg *config.Config) {
 			fmt.Println("Using default setting: Fully encrypting .env file")
 		}
 	}
-	
+
 	if !cmd.Flags().Changed("use-key-file") && cfg.UseKeyFileByDefault {
 		encryption.UseKeyFile = true
 		fmt.Println("Using default setting: Using key file for encryption")
 	}
-	
+
 	if !cmd.Flags().Changed("key-file") && cfg.DefaultKeyFile != "" {
 		encryption.EncryptionKeyFile = cfg.DefaultKeyFile
 		fmt.Printf("Using default key file: %s\n", encryption.EncryptionKeyFile)
 	}
-} 
+}
+
+// createNewGist creates a new GitHub Gist
+func createNewGist(client *github.Client, content []byte, description string, public bool) (*github.Gist, error) {
+	// Create the Gist files
+	files := map[github.GistFilename]github.GistFile{
+		".env": {
+			Content: github.String(string(content)),
+		},
+	}
+
+	// Add README if content is encrypted
+	if encryption.UseEncryption || encryption.UseMaskedEncryption {
+		readmeContent := createReadmeContent(encryption.UseEncryption, encryption.UseMaskedEncryption)
+		files["README.md"] = github.GistFile{
+			Content: github.String(readmeContent),
+		}
+	}
+
+	// Create the Gist
+	gist := &github.Gist{
+		Description: github.String(description),
+		Public:      github.Bool(public),
+		Files:       files,
+	}
+
+	// Create the Gist via GitHub API
+	createdGist, _, err := client.Gists.Create(context.Background(), gist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Gist: %w", err)
+	}
+
+	return createdGist, nil
+}
+
+// updateExistingGist updates an existing GitHub Gist
+func updateExistingGist(client *github.Client, gistID string, content []byte, description string, public bool) (*github.Gist, error) {
+	// Get the existing Gist first
+	existingGist, _, err := client.Gists.Get(context.Background(), gistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get existing Gist: %w", err)
+	}
+
+	// Update the .env file content
+	existingGist.Files[".env"] = github.GistFile{
+		Content: github.String(string(content)),
+	}
+
+	// Update README if content is encrypted
+	if encryption.UseEncryption || encryption.UseMaskedEncryption {
+		readmeContent := createReadmeContent(encryption.UseEncryption, encryption.UseMaskedEncryption)
+		existingGist.Files["README.md"] = github.GistFile{
+			Content: github.String(readmeContent),
+		}
+	}
+
+	// Update description and public status if provided
+	if description != "" {
+		existingGist.Description = github.String(description)
+	}
+	existingGist.Public = github.Bool(public)
+
+	// Update the Gist via GitHub API
+	updatedGist, _, err := client.Gists.Edit(context.Background(), gistID, existingGist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update Gist: %w", err)
+	}
+
+	return updatedGist, nil
+}
