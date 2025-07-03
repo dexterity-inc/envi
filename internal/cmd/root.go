@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/utils"
 	"github.com/dexterity-inc/envi/internal/version"
 )
 
@@ -13,9 +14,12 @@ var rootCmd = &cobra.Command{
 	Short:   "Manage environment variables with GitHub Gists",
 	Long:    `Envi is a secure tool for storing and sharing .env files via GitHub Gists.`,
 	Version: version.Version,
-	
+
 	// This will run before the main command execution
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Initialize logger with TUI setting
+		utils.InitLogger(encryption.UseTUI)
+
 		// Check if the version flag was used
 		if cmd.Flag("version") != nil && cmd.Flag("version").Changed {
 			displayVersion()
@@ -23,7 +27,7 @@ var rootCmd = &cobra.Command{
 			cobra.CheckErr(nil)
 		}
 	},
-	
+
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help by default when no subcommand is provided
 		cmd.Help()
@@ -34,21 +38,23 @@ var rootCmd = &cobra.Command{
 func Execute() error {
 	// Set up global flags
 	rootCmd.PersistentFlags().BoolVar(&encryption.UseTUI, "tui", true, "Use interactive terminal UI")
-	
-	// Initialize commands
+
+	// Initialize all commands
 	InitConfigCommand()
-	InitShareCommand()
 	InitPushCommand()
 	InitPullCommand()
 	InitListCommand()
-	InitValidateCommand()
+	InitShareCommand()
 	InitMergeCommand()
-	InitVersionCommand()
+	InitDecryptCommand()
+	InitValidateCommand()
 	InitCompletionCommand()
-	
+	InitVersionCommand()
+	InitGistCommand()
+
 	// Initialize command flags
 	encryption.InitEncryptionFlags(rootCmd)
-	
+
 	// Run the command
 	return rootCmd.Execute()
-} 
+}
