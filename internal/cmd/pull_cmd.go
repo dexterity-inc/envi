@@ -13,6 +13,7 @@ import (
 
 	"github.com/dexterity-inc/envi/internal/config"
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/tui"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
@@ -48,7 +49,7 @@ func InitPullCommand() {
 	// Add encryption flags for decryption
 	pullCmd.Flags().BoolVar(&encryption.UseKeyFile, "use-key-file", false, "Use key file instead of password")
 	pullCmd.Flags().StringVarP(&encryption.EncryptionKeyFile, "key-file", "k", ".envi.key", "Path to encryption key file")
-	pullCmd.Flags().StringVarP(&encryption.EncryptionPassword, "password", "p", "", "Encryption password (not recommended)")
+	// Password flag removed for security - passwords should only be entered interactively
 
 	// Add the pull command to the root command
 	rootCmd.AddCommand(pullCmd)
@@ -57,6 +58,20 @@ func InitPullCommand() {
 // runPullCommand handles the pull command execution
 func runPullCommand(cmd *cobra.Command, args []string) {
 	logger := utils.GetLogger()
+
+	// Validate output file path for security
+	if err := security.ValidateOutputPath(pullOutput); err != nil {
+		utils.Error("Invalid output file path: %s", err)
+		utils.Fatal("Security validation failed")
+	}
+
+	// Validate key file path if using key file
+	if encryption.UseKeyFile {
+		if err := security.ValidateKeyFilePath(encryption.EncryptionKeyFile); err != nil {
+			utils.Error("Invalid key file path: %s", err)
+			utils.Fatal("Security validation failed")
+		}
+	}
 
 	// Handle self-contained pull
 	if pullSelfContained {

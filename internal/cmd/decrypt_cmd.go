@@ -7,6 +7,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/tui"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
@@ -16,7 +17,7 @@ var (
 	decryptInputFile     string
 	decryptOutputFile    string
 	decryptSelfContained bool
-	decryptPassword      string
+	// decryptPassword removed for security - passwords should only be entered interactively
 )
 
 // decryptCmd is the decrypt command
@@ -33,7 +34,7 @@ func InitDecryptCommand() {
 	decryptCmd.Flags().StringVarP(&decryptInputFile, "input", "i", "", "Input file to decrypt")
 	decryptCmd.Flags().StringVarP(&decryptOutputFile, "output", "o", ".env", "Output file path")
 	decryptCmd.Flags().BoolVar(&decryptSelfContained, "self-contained", false, "Decrypt a self-contained encrypted share")
-	decryptCmd.Flags().StringVarP(&decryptPassword, "password", "p", "", "Password for decryption")
+	// Password flag removed for security - passwords should only be entered interactively
 
 	// Add encryption flags for standard decryption
 	decryptCmd.Flags().BoolVar(&encryption.UseKeyFile, "use-key-file", false, "Use key file instead of password")
@@ -58,11 +59,9 @@ func runDecryptCommand(cmd *cobra.Command, args []string) {
 
 // handleSelfContainedDecrypt handles self-contained encrypted share decryption
 func handleSelfContainedDecrypt(cmd *cobra.Command) {
-	// Get the share password
+	// Get the share password - always prompt for security
 	var sharePassword string
-	if decryptPassword != "" {
-		sharePassword = decryptPassword
-	} else {
+	// Always prompt for password (no command line option for security)
 		// Prompt for password
 		if encryption.UseTUI {
 			var err error
@@ -81,7 +80,6 @@ func handleSelfContainedDecrypt(cmd *cobra.Command) {
 			utils.Info("")
 			sharePassword = string(passwordBytes)
 		}
-	}
 
 	if sharePassword == "" {
 		utils.Error("Password cannot be empty")
@@ -93,6 +91,18 @@ func handleSelfContainedDecrypt(cmd *cobra.Command) {
 		utils.Error("Input file is required for self-contained decryption")
 		utils.Info("Use --input to specify the file containing the encrypted content")
 		utils.Fatal("Missing input file")
+	}
+
+	// Validate input file path for security
+	if err := security.ValidateInputPath(decryptInputFile); err != nil {
+		utils.Error("Invalid input file path: %s", err)
+		utils.Fatal("Security validation failed")
+	}
+
+	// Validate output file path for security
+	if err := security.ValidateOutputPath(decryptOutputFile); err != nil {
+		utils.Error("Invalid output file path: %s", err)
+		utils.Fatal("Security validation failed")
 	}
 
 	encryptedContent, err := os.ReadFile(decryptInputFile)
@@ -136,6 +146,18 @@ func handleStandardDecrypt(cmd *cobra.Command) {
 		utils.Error("Input file is required")
 		utils.Info("Use --input to specify the file to decrypt")
 		utils.Fatal("Missing input file")
+	}
+
+	// Validate input file path for security
+	if err := security.ValidateInputPath(decryptInputFile); err != nil {
+		utils.Error("Invalid input file path: %s", err)
+		utils.Fatal("Security validation failed")
+	}
+
+	// Validate output file path for security
+	if err := security.ValidateOutputPath(decryptOutputFile); err != nil {
+		utils.Error("Invalid output file path: %s", err)
+		utils.Fatal("Security validation failed")
 	}
 
 	encryptedContent, err := os.ReadFile(decryptInputFile)

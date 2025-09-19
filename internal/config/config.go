@@ -1,14 +1,18 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/google/go-github/v37/github"
 	"github.com/zalando/go-keyring"
+	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -187,8 +191,20 @@ func DeleteTokenFromKeyring() error {
 	return keyring.Delete(applicationName, tokenUsername)
 }
 
-// IsValidGitHubToken checks if a token is a valid GitHub PAT format
+// IsValidGitHubToken performs comprehensive validation of GitHub tokens
+// including format validation and API-based verification
 func IsValidGitHubToken(token string) bool {
+	// First perform basic format validation
+	if !isValidTokenFormat(token) {
+		return false
+	}
+	
+	// Perform API-based validation
+	return validateTokenWithAPI(token)
+}
+
+// isValidTokenFormat checks if a token matches GitHub PAT format requirements
+func isValidTokenFormat(token string) bool {
 	// GitHub Personal Access Tokens are at least 40 characters
 	if len(token) < 30 {
 		return false
@@ -214,6 +230,77 @@ func IsValidGitHubToken(token string) bool {
 	
 	// Check if it's a valid old-style token
 	return hexRegex.MatchString(token)
+}
+
+// validateTokenWithAPI verifies the GitHub token by making an API call
+// and checks for required permissions (gist scope)
+func validateTokenWithAPI(token string) bool {
+	// Create a context with shorter timeout for validation
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Create OAuth2 token source with timeout
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+
+	// Create GitHub client
+	client := github.NewClient(tc)
+
+	// Test the token by getting user information with retry
+	var user *github.User
+	var err error
+	for attempts := 0; attempts < 2; attempts++ {
+		user, _, err = client.Users.Get(ctx, "")
+		if err == nil {
+			break
+		}
+		// Brief delay before retry
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(100 * time.Millisecond):
+			continue
+		}
+	}
+
+	if err != nil {
+		// Token is invalid or expired
+		return false
+	}
+
+	// Check if we got valid user information
+	if user == nil || user.Login == nil {
+		return false
+	}
+
+	// Verify gist permissions by attempting to list gists with retry
+	gistOpts := &github.GistListOptions{
+		ListOptions: github.ListOptions{PerPage: 1},
+	}
+
+	for attempts := 0; attempts < 2; attempts++ {
+		_, _, err = client.Gists.List(ctx, "", gistOpts)
+		if err == nil {
+			break
+		}
+		// Brief delay before retry
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(100 * time.Millisecond):
+			continue
+		}
+	}
+
+	if err != nil {
+		// Token doesn't have gist permissions
+		return false
+	}
+
+	// Token is valid and has required permissions
+	return true
 }
 
 // verifyConfigPermissions checks and warns about insecure file permissions

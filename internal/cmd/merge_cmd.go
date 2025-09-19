@@ -14,6 +14,7 @@ import (
 
 	"github.com/dexterity-inc/envi/internal/config"
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
@@ -57,6 +58,20 @@ func InitMergeCommand() {
 
 // runMergeCommand handles the merge command execution
 func runMergeCommand(cmd *cobra.Command, args []string) {
+	// Validate output file path for security
+	if err := security.ValidateOutputPath(mergeOutput); err != nil {
+		utils.Error("Invalid output file path: %s", err)
+		utils.Fatal("Security validation failed")
+	}
+
+	// Validate all input file paths for security
+	for _, file := range mergeFiles {
+		if err := security.ValidateInputPath(file); err != nil {
+			utils.Error("Invalid input file path '%s': %s", file, err)
+			utils.Fatal("Security validation failed")
+		}
+	}
+
 	// Check if we're merging with a Gist or local files
 	if mergeGistID == "" && len(mergeFiles) == 0 {
 		utils.Error("You must specify either local files to merge (--files) or a Gist ID to merge with (--gist)")

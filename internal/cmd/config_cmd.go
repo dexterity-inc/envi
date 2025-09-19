@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dexterity-inc/envi/internal/config"
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
@@ -279,6 +280,12 @@ func handleKeyGeneration() {
 	keyFile := configKeyFile
 	if keyFile == "" {
 		keyFile = utils.DefaultKeyFile
+	}
+
+	// Validate key file path for security
+	if err := security.ValidateKeyFilePath(keyFile); err != nil {
+		utils.Error("Invalid key file path: %s", err)
+		utils.Fatal("Security validation failed")
 	}
 
 	// Generate the key (32 random bytes)

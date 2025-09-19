@@ -75,17 +75,28 @@ envi pull --id GIST_ID
 
 ## Security Features
 
-- **Token Storage**: Your GitHub token is securely stored in your system's credential manager
-- **Masked Encryption**: Keep variable names visible but encrypt values (default)
-- **Full Encryption**: Encrypt the entire .env file
-- **Key-based Encryption**: Use a key file for enhanced security
-- **Auto-Description**: Automatically generate descriptive Gist names based on your project
+- **🔐 Secure Token Storage**: Your GitHub token is securely stored in your system's credential manager
+- **🛡️ Interactive Password Input**: All passwords are entered securely through interactive prompts (never via command line)
+- **🔒 Advanced Encryption**: 
+  - **Masked Encryption**: Keep variable names visible but encrypt values (default)
+  - **Full Encryption**: Encrypt the entire .env file
+  - **PBKDF2 Key Derivation**: Industry-standard secure key derivation with 100,000 iterations
+- **🔑 Key-based Encryption**: Use a key file for enhanced security
+- **🚫 Path Traversal Protection**: Comprehensive sanitization prevents directory traversal attacks
+- **✅ API Token Validation**: Real-time GitHub API validation ensures token validity and permissions
+- **📝 Input Validation**: Environment variable names and values are validated for security
+- **🔍 Secure Error Handling**: Error messages sanitized to prevent information disclosure
+- **⏱️ API Rate Limiting**: Built-in protections against GitHub API abuse
+- **📊 Secure Logging**: Prevents accidental exposure of sensitive data in logs
+- **🚀 Secure Sharing**: Share encrypted content with clear guidance on secure password distribution
+- **📋 Auto-Description**: Automatically generate descriptive Gist names based on your project
 
 ## Core Commands
 
 - `envi config`: Configure settings and GitHub token
 - `envi push`: Push .env file to GitHub Gist
 - `envi pull`: Pull .env file from GitHub Gist
+- `envi decrypt`: Decrypt encrypted .env files and self-contained shares
 - `envi list`: List your GitHub Gists with .env files
 - `envi share`: Share .env files with team members
 - `envi validate`: Validate .env file format and required variables
@@ -133,6 +144,16 @@ envi share --users user1,user2 --generate-key
 
 # Share with URL and key file (recipient needs both to decrypt)
 envi share --url --generate-key
+```
+
+### Decrypting Shared Content
+
+```bash
+# Decrypt a self-contained encrypted share (password prompted securely)
+envi decrypt --self-contained --input encrypted.env --output .env
+
+# Pull and decrypt from a Gist
+envi pull --id GIST_ID --unmask
 ```
 
 ### Validating .env Files
@@ -195,6 +216,47 @@ envi completion powershell | Out-String | Invoke-Expression
 ```
 
 For permanent installation, see the help with `envi completion --help`.
+
+## Security Best Practices
+
+### 🔑 Token Management
+- **Use System Keyring**: Always store GitHub tokens in your system's credential manager (default behavior)
+- **Token Scopes**: Ensure your GitHub token has only required scopes (gist, repo)
+- **Regular Rotation**: Rotate tokens regularly and remove unused ones
+- **API Validation**: Tokens are automatically validated with real GitHub API calls
+
+### 🔐 Encryption Guidelines
+- **Default Security**: Masked encryption is enabled by default for optimal security/usability balance
+- **Full Encryption**: Use `--encrypt` for maximum security when entire file encryption is needed
+- **Key Files**: Prefer key files over passwords for better security (`--use-key-file`)
+- **PBKDF2 Protection**: All password-based encryption uses PBKDF2 with 100,000 iterations
+
+### 🚫 File Security
+- **Path Validation**: All file paths are automatically sanitized to prevent directory traversal
+- **Safe Locations**: Avoid storing key files in temporary directories
+- **Permission Checks**: Config files automatically use secure permissions (600)
+
+### 🚀 Sharing Security
+- **Encrypted Sharing**: Always use encryption when sharing environment variables
+- **Secure Channels**: Share passwords through secure channels (Signal, encrypted email)
+- **Self-Contained**: Use `--self-contained` for maximum sharing security
+- **Expiration**: Regularly rotate shared content and revoke access
+
+### 📝 Environment Variable Safety
+- **Input Validation**: Variable names and values are automatically validated
+- **Dangerous Patterns**: System warns about potentially dangerous content
+- **POSIX Compliance**: Variable names follow POSIX standards
+- **Length Limits**: Enforced limits prevent abuse (names: 128 chars, values: 4KB)
+
+### ⚠️ Security Warnings
+- **Never share passwords via insecure channels**: Use encrypted messaging (Signal, encrypted email) for password sharing
+- **Use key files for automation**: For scripts and CI/CD, prefer key files over passwords
+- **Regularly rotate tokens**: Update your GitHub tokens periodically
+- **Verify Gist permissions**: Ensure your GitHub token has minimal required permissions (gist scope)
+- **Keep passwords secure**: All password input is interactive - never pass passwords as command arguments
+- **Avoid system variables**: Don't override PATH, HOME, or other system variables
+- **Regular validation**: Use `envi validate` to check for security issues
+- **Monitor access**: Review Gist access and sharing permissions regularly
 
 ## License
 

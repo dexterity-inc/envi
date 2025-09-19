@@ -392,7 +392,7 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 	}
 
 	// Add README with instructions
-	readmeContent := createSelfContainedReadmeContent(user, sharePass)
+	readmeContent := createSelfContainedReadmeContent(user)
 	newGist.Files[github.GistFilename("README.md")] = github.GistFile{
 		Content: github.String(readmeContent),
 	}
@@ -410,17 +410,21 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 	sharingMessage += "📋 Instructions for recipients:\n"
 	sharingMessage += "1. Visit the URL above\n"
 	sharingMessage += "2. Copy the .env file content\n"
-	sharingMessage += "3. Run: envi pull --self-contained --share-password <password>\n"
-	sharingMessage += "4. Paste the content when prompted\n\n"
+	sharingMessage += "3. Run: envi pull --self-contained\n"
+	sharingMessage += "4. Enter the password when prompted\n"
+	sharingMessage += "5. Paste the content when prompted\n\n"
 	sharingMessage += "💡 This share is completely self-contained - no separate key files needed!"
-	fmt.Println("IMPORTANT: Save the password securely - it's needed to decrypt the shared content!")
+	// Display the password securely (only in console, not in README)
+	fmt.Printf("\n🔑 Generated Password: %s\n", sharePass)
+	fmt.Println("⚠️  CRITICAL: Share this password through a secure channel (Signal, encrypted email, etc.)!")
+	fmt.Println("⚠️  DO NOT include the password in emails, Slack, or other insecure channels!")
 
 	if encryption.UseTUI {
 		tui.ShowSuccess("Self-Contained Share Created", []string{
 			fmt.Sprintf("Shareable URL: https://gist.github.com/%s", *createdGist.ID),
-			"Recipients can use: envi pull --self-contained --share-password <password>",
+			"Recipients can use: envi pull --self-contained",
 			"No separate key files needed!",
-			"IMPORTANT: Save the password securely - it's needed to decrypt the shared content!",
+			"IMPORTANT: Share the password separately through a secure channel!",
 		})
 	} else {
 		fmt.Println(sharingMessage)
@@ -438,11 +442,11 @@ func generateSecurePassword() string {
 }
 
 // createSelfContainedReadmeContent generates README for self-contained shares
-func createSelfContainedReadmeContent(user *github.User, password string) string {
+func createSelfContainedReadmeContent(user *github.User) string {
 	readmeContent := fmt.Sprintf("# Self-Contained Encrypted Environment Variables\n\n")
 	readmeContent += fmt.Sprintf("This Gist contains environment variables shared by @%s using envi's self-contained encryption.\n\n", *user.Login)
-	readmeContent += "## 🔐 Decryption Password\n\n"
-	readmeContent += fmt.Sprintf("**Password:** `%s`\n\n", password)
+	readmeContent += "## 🔐 Decryption Instructions\n\n"
+	readmeContent += "To decrypt this content, you will need the password that was shared with you separately.\n\n"
 	readmeContent += "## 📋 How to Use\n\n"
 	readmeContent += "### Option 1: Using envi CLI (Recommended)\n\n"
 	readmeContent += "1. Install envi if you haven't already:\n\n"
@@ -455,14 +459,16 @@ func createSelfContainedReadmeContent(user *github.User, password string) string
 	readmeContent += "```\n\n"
 	readmeContent += "2. Pull the environment variables:\n\n"
 	readmeContent += "```shell\n"
-	readmeContent += "envi pull --self-contained --password " + password + "\n"
+	readmeContent += "envi pull --self-contained\n"
 	readmeContent += "```\n\n"
-	readmeContent += "3. When prompted, paste the content from the `.env` file above\n\n"
+	readmeContent += "3. When prompted, enter the password that was shared with you separately\n"
+	readmeContent += "4. Paste the content from the `.env` file above when prompted\n\n"
 	readmeContent += "### Option 2: Manual Decryption\n\n"
 	readmeContent += "If you prefer to decrypt manually:\n\n"
 	readmeContent += "1. Copy the content from the `.env` file above\n"
 	readmeContent += "2. Save it to a file (e.g., `encrypted.env`)\n"
-	readmeContent += "3. Run: `envi decrypt --self-contained --password " + password + " --input encrypted.env --output .env`\n\n"
+	readmeContent += "3. Run: `envi decrypt --self-contained --input encrypted.env --output .env`\n"
+	readmeContent += "4. When prompted, enter the password that was shared with you separately\n\n"
 	readmeContent += "## 🔒 Security Features\n\n"
 	readmeContent += "- ✅ **Self-contained**: No separate key files needed\n"
 	readmeContent += "- ✅ **Password-protected**: AES-256 encryption with PBKDF2 key derivation\n"
