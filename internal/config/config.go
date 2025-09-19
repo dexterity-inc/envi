@@ -18,14 +18,44 @@ import (
 
 // Config stores application configuration
 type Config struct {
-	GitHubToken         string `yaml:"github_token,omitempty"`
-	LastGistID          string `yaml:"last_gist_id,omitempty"`
-	TokenInKeyring      bool   `yaml:"token_in_keyring"`
-	EncryptByDefault    bool   `yaml:"encrypt_by_default"`
-	UseMaskedEncryption bool   `yaml:"use_masked_encryption"`
-	UnmaskByDefault     bool   `yaml:"unmask_by_default"`
-	DefaultKeyFile      string `yaml:"default_key_file,omitempty"`
-	UseKeyFileByDefault bool   `yaml:"use_key_file_by_default"`
+	GitHubToken         string                  `yaml:"github_token,omitempty"`
+	LastGistID          string                  `yaml:"last_gist_id,omitempty"`
+	TokenInKeyring      bool                    `yaml:"token_in_keyring"`
+	EncryptByDefault    bool                    `yaml:"encrypt_by_default"`
+	UseMaskedEncryption bool                    `yaml:"use_masked_encryption"`
+	UnmaskByDefault     bool                    `yaml:"unmask_by_default"`
+	DefaultKeyFile      string                  `yaml:"default_key_file,omitempty"`
+	UseKeyFileByDefault bool                    `yaml:"use_key_file_by_default"`
+	GistHistory         map[string]*GistInfo    `yaml:"gist_history,omitempty"`
+	Projects            map[string]*ProjectInfo `yaml:"projects,omitempty"`
+}
+
+// GistInfo stores enhanced gist metadata
+type GistInfo struct {
+	ID          string   `yaml:"id"`
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	CreatedAt   string   `yaml:"created_at"`
+	UpdatedAt   string   `yaml:"updated_at"`
+	LastUsed    string   `yaml:"last_used,omitempty"`
+	UsageCount  int      `yaml:"usage_count"`
+	IsEncrypted bool     `yaml:"is_encrypted"`
+	IsPublic    bool     `yaml:"is_public"`
+	FileCount   int      `yaml:"file_count"`
+	URL         string   `yaml:"url"`
+	ProjectName string   `yaml:"project_name,omitempty"`
+	Environment string   `yaml:"environment,omitempty"`
+	Tags        []string `yaml:"tags,omitempty"`
+}
+
+// ProjectInfo stores project metadata
+type ProjectInfo struct {
+	Name         string   `yaml:"name"`
+	Path         string   `yaml:"path"`
+	CreatedAt    string   `yaml:"created_at"`
+	LastUsed     string   `yaml:"last_used,omitempty"`
+	Environments []string `yaml:"environments,omitempty"`
+	GistIDs      []string `yaml:"gist_ids,omitempty"`
 }
 
 const (
@@ -314,5 +344,46 @@ func verifyConfigPermissions(configPath string) {
 	if info.Mode().Perm() != configFilePerms {
 		fmt.Printf("Warning: Config file has insecure permissions: %o\n", info.Mode().Perm())
 		fmt.Printf("Run 'chmod 600 %s' to fix\n", configPath)
+	}
+}
+
+// AddGistToHistory adds a gist to the history
+func (c *Config) AddGistToHistory(gist *GistInfo) {
+	if c.GistHistory == nil {
+		c.GistHistory = make(map[string]*GistInfo)
+	}
+	
+	// Update usage count if gist already exists
+	if existing, exists := c.GistHistory[gist.ID]; exists {
+		gist.UsageCount = existing.UsageCount + 1
+		gist.LastUsed = time.Now().Format("2006-01-02 15:04:05")
+	} else {
+		gist.UsageCount = 1
+		gist.LastUsed = time.Now().Format("2006-01-02 15:04:05")
+	}
+	
+	c.GistHistory[gist.ID] = gist
+}
+
+// GetGistInfo retrieves gist information from history
+func (c *Config) GetGistInfo(gistID string) (*GistInfo, bool) {
+	if c.GistHistory == nil {
+		return nil, false
+	}
+	
+	gist, exists := c.GistHistory[gistID]
+	return gist, exists
+}
+
+// UpdateGistUsage updates the usage count and last used time for a gist
+func (c *Config) UpdateGistUsage(gistID string) {
+	if c.GistHistory == nil {
+		c.GistHistory = make(map[string]*GistInfo)
+		return
+	}
+	
+	if gist, exists := c.GistHistory[gistID]; exists {
+		gist.UsageCount++
+		gist.LastUsed = time.Now().Format("2006-01-02 15:04:05")
 	}
 } 

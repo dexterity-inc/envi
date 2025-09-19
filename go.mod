@@ -5,12 +5,14 @@ go 1.23.0
 toolchain go1.24.2
 
 require (
+	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v0.17.1
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/lipgloss v0.9.1
 	github.com/google/go-github/v37 v37.0.0
 	github.com/spf13/cobra v1.8.0
 	github.com/zalando/go-keyring v0.2.3
+	golang.org/x/crypto v0.36.0
 	golang.org/x/oauth2 v0.15.0
 	golang.org/x/term v0.30.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -18,8 +20,8 @@ require (
 
 require (
 	github.com/alessio/shellescape v1.4.1 // indirect
-	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/containerd/console v1.0.4-0.20230313162750-1ae8d489ac81 // indirect
 	github.com/danieljoos/wincred v1.2.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
@@ -36,7 +38,6 @@ require (
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect

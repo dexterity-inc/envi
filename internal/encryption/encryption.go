@@ -382,6 +382,28 @@ func hashPassword(password string) []byte {
 	return deriveKeyFromPassword(password, salt[:PBKDF2SaltLength])
 }
 
+// IsSelfContainedShare checks if the content is a self-contained encrypted share
+func IsSelfContainedShare(content []byte) bool {
+	// For now, we consider all encrypted content as potentially self-contained
+	// This can be extended later to support specific self-contained formats
+	return IsEncrypted(content)
+}
+
+// DecryptSelfContainedShare decrypts a self-contained encrypted share
+func DecryptSelfContainedShare(content []byte, password string) ([]byte, error) {
+	// Temporarily store the current password
+	originalPassword := EncryptionPassword
+	defer func() {
+		EncryptionPassword = originalPassword
+	}()
+	
+	// Set the provided password
+	EncryptionPassword = password
+	
+	// Decrypt using the standard decryption method
+	return DecryptContent(content)
+}
+
 // GenerateKeyFile creates a new encryption key file with random data
 func GenerateKeyFile(keyFilePath string) error {
 	// Generate a random key

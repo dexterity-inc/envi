@@ -94,7 +94,6 @@ func sanitizeFilePaths(msg string) string {
 // sanitizeSecrets removes potential secrets from error messages
 func sanitizeSecrets(msg string) string {
 	// Remove potential tokens (40+ character alphanumeric strings)
-	tokenPattern := `[a-zA-Z0-9]{40,}`
 	// Don't use regex for simplicity, just check for known prefixes
 	prefixes := []string{"ghp_", "github_pat_", "gho_", "ghu_", "ghs_"}
 	

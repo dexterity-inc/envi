@@ -28,8 +28,13 @@ func SanitizeFilePath(path string) (string, error) {
 	// Clean the path to resolve any . and .. components
 	cleaned := filepath.Clean(path)
 
-	// Check for absolute paths
+	// Check for absolute paths (Unix-style)
 	if filepath.IsAbs(cleaned) {
+		return "", ErrAbsolutePath
+	}
+
+	// Check for Windows-style absolute paths (even on non-Windows systems)
+	if len(cleaned) >= 3 && cleaned[1] == ':' && (cleaned[2] == '\\' || cleaned[2] == '/') {
 		return "", ErrAbsolutePath
 	}
 
