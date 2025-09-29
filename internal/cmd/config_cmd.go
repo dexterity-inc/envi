@@ -279,7 +279,7 @@ func handleEncryptionSettings(cfg *config.Config) {
 func handleKeyGeneration() {
 	keyFile := configKeyFile
 	if keyFile == "" {
-		keyFile = utils.DefaultKeyFile
+		keyFile = utils.DefaultKeyFile()
 	}
 
 	// Validate key file path for security

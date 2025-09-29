@@ -106,6 +106,50 @@ func GetLogger() *Logger {
 	return defaultLogger
 }
 
+// Instance methods for Logger to keep backwards compatibility where
+// callers expect a logger instance with Info/Warn/Error/Success methods.
+func (l *Logger) Info(format string, args ...interface{}) {
+	Info(format, args...)
+}
+
+func (l *Logger) Success(format string, args ...interface{}) {
+	Success(format, args...)
+}
+
+func (l *Logger) Error(format string, args ...interface{}) {
+	Error(format, args...)
+}
+
+func (l *Logger) Warn(format string, args ...interface{}) {
+	Warn(format, args...)
+}
+
+// WrapFileError wraps a file-related error with context (nil-safe)
+func WrapFileError(err error, context string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}
+
+// WrapEncryptionError wraps encryption related errors with context (nil-safe)
+func WrapEncryptionError(err error, context string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}
+
+// NewInputError creates a typed input error
+func NewInputError(msg string) error {
+	return fmt.Errorf("input error: %s", msg)
+}
+
+// NewValidationError creates a typed validation error
+func NewValidationError(msg string) error {
+	return fmt.Errorf("validation error: %s", msg)
+}
+
 // FatalMessage logs a fatal message and exits
 func FatalMessage(format string, args ...interface{}) {
 	Fatal(format, args...)
