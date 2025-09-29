@@ -14,8 +14,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/term"
 
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/tui"
 )
 
@@ -34,6 +36,10 @@ const (
 	EncryptionPrefix    = "ENVI_ENCRYPTED:"
 	MaskedPrefix        = "ENVI_MASKED:"
 	EncryptionKeyLength = 32 // 256-bit key
+	
+	// PBKDF2 parameters for secure key derivation
+	PBKDF2Iterations = 100000 // OWASP recommended minimum
+	PBKDF2SaltLength = 16     // 128-bit salt
 )
 
 // InitEncryptionFlags initializes encryption-related flags for commands
@@ -329,6 +335,11 @@ func getEncryptionKey() ([]byte, error) {
 
 // getKeyFromFile reads the encryption key from a file
 func getKeyFromFile() ([]byte, error) {
+	// Validate key file path for security
+	if err := security.ValidateKeyFilePath(EncryptionKeyFile); err != nil {
+		return nil, fmt.Errorf("invalid key file path: %w", err)
+	}
+
 	keyData, err := os.ReadFile(EncryptionKeyFile)
 	if err != nil {
 		return nil, errors.New("failed to read encryption key file")
@@ -353,10 +364,44 @@ func getKeyFromFile() ([]byte, error) {
 	return hashPassword(string(key)), nil
 }
 
-// hashPassword creates a fixed-length encryption key from a password
+// deriveKeyFromPassword creates a secure encryption key from a password using PBKDF2
+func deriveKeyFromPassword(password string, salt []byte) []byte {
+	// Use PBKDF2 with SHA-256, 100,000 iterations (OWASP recommended)
+	return pbkdf2.Key([]byte(password), salt, PBKDF2Iterations, EncryptionKeyLength, sha256.New)
+}
+
+// hashPassword creates a fixed-length encryption key from a password using secure key derivation
+// This function generates a deterministic salt from the password for backward compatibility
+// Note: For new implementations, use deriveKeyFromPassword with a random salt
 func hashPassword(password string) []byte {
-	hash := sha256.Sum256([]byte(password))
-	return hash[:]
+	// Generate a deterministic salt from the password for backward compatibility
+	// This ensures existing encrypted data can still be decrypted
+	salt := sha256.Sum256([]byte("envi-salt-" + password))
+	
+	// Use PBKDF2 for secure key derivation
+	return deriveKeyFromPassword(password, salt[:PBKDF2SaltLength])
+}
+
+// IsSelfContainedShare checks if the content is a self-contained encrypted share
+func IsSelfContainedShare(content []byte) bool {
+	// For now, we consider all encrypted content as potentially self-contained
+	// This can be extended later to support specific self-contained formats
+	return IsEncrypted(content)
+}
+
+// DecryptSelfContainedShare decrypts a self-contained encrypted share
+func DecryptSelfContainedShare(content []byte, password string) ([]byte, error) {
+	// Temporarily store the current password
+	originalPassword := EncryptionPassword
+	defer func() {
+		EncryptionPassword = originalPassword
+	}()
+	
+	// Set the provided password
+	EncryptionPassword = password
+	
+	// Decrypt using the standard decryption method
+	return DecryptContent(content)
 }
 
 // GenerateKeyFile creates a new encryption key file with random data

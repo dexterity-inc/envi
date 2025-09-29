@@ -199,7 +199,6 @@ Pull your .env file from a GitHub Gist with optional decryption.
 | `-i, --id string`       | GitHub Gist ID to pull from                       |
 | `-o, --output string`   | Output file path (default ".env")                 |
 | `-k, --key-file string` | Path to encryption key file (default ".envi.key") |
-| `-p, --password string` | Encryption password (not recommended)             |
 | `-u, --unmask`          | Decrypt/unmask values when pulling                |
 | `--use-key-file`        | Use key file instead of password                  |
 

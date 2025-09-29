@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
@@ -198,9 +199,24 @@ func parseEnvFile(filename string) (map[string]string, []string, error) {
 
 		// Handle environment variables
 		if envVarRegex.MatchString(line) {
+			// Validate the entire line first
+			if err := security.ValidateEnvLine(line); err != nil {
+				utils.Warn("Security validation warning for line '%s': %s", line, err)
+				// Continue parsing but warn user about potential issues
+			}
+
 			matches := envVarRegex.FindStringSubmatch(line)
 			varName := matches[1]
 			varValue := matches[2]
+
+			// Additional security validation
+			if err := security.ValidateEnvVarName(varName); err != nil {
+				utils.Warn("Security validation warning for variable name '%s': %s", varName, err)
+			}
+
+			if err := security.ValidateEnvVarValue(varValue); err != nil {
+				utils.Warn("Security validation warning for variable value '%s': %s", varName, err)
+			}
 
 			// Remove quotes if present
 			if len(varValue) >= 2 && (varValue[0] == '"' && varValue[len(varValue)-1] == '"' ||

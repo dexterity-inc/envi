@@ -14,6 +14,7 @@ import (
 
 	"github.com/dexterity-inc/envi/internal/config"
 	"github.com/dexterity-inc/envi/internal/encryption"
+	"github.com/dexterity-inc/envi/internal/security"
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
@@ -112,6 +113,20 @@ func getProjectName() string {
 // runPushCommand handles the push command execution
 func runPushCommand(cmd *cobra.Command, args []string) {
 	logger := utils.GetLogger()
+
+	// Validate input file path for security
+	if err := security.ValidateInputPath(pushEnvFile); err != nil {
+		utils.Error("Invalid input file path: %s", err)
+		utils.Fatal("Security validation failed")
+	}
+
+	// Validate key file path if using key file
+	if encryption.UseKeyFile {
+		if err := security.ValidateKeyFilePath(encryption.EncryptionKeyFile); err != nil {
+			utils.Error("Invalid key file path: %s", err)
+			utils.Fatal("Security validation failed")
+		}
+	}
 
 	// Get GitHub token
 	token, err := config.GetGitHubToken()
