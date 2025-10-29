@@ -144,6 +144,45 @@ func LoadConfig() (*Config, error) {
 	return &config, nil
 }
 
+// GetEnvironmentFromFilename extracts the environment name from an env file name
+// e.g., ".env.production" -> "production", ".env" -> "default"
+func GetEnvironmentFromFilename(filename string) string {
+	if filename == ".env" {
+		return "default"
+	}
+	
+	if strings.HasPrefix(filename, ".env.") {
+		return strings.TrimPrefix(filename, ".env.")
+	}
+	
+	return "default"
+}
+
+// GenerateGistDescription creates a descriptive Gist description
+func GenerateGistDescription(envFile, projectName, environment string, encrypted bool) string {
+	var parts []string
+	
+	if projectName != "" {
+		parts = append(parts, projectName)
+	}
+	
+	if environment != "default" {
+		parts = append(parts, environment)
+	}
+	
+	parts = append(parts, "environment variables")
+	
+	desc := strings.Join(parts, " ")
+	
+	if encrypted {
+		desc += " (encrypted)"
+	}
+	
+	desc += " - Created with envi"
+	
+	return desc
+}
+
 // SaveConfig saves the configuration to disk
 func SaveConfig(config *Config) error {
 	configPath, err := ConfigPath()

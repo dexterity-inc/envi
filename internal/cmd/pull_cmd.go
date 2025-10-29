@@ -18,17 +18,14 @@ import (
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
-// Pull command flags
 var (
 	pullGistID        string
 	pullOutput        string
 	pullUnmask        bool
 	pullForce         bool
 	pullSelfContained bool
-	pullSharePassword string
 )
 
-// pullCmd is the pull command
 var pullCmd = &cobra.Command{
 	Use:   "pull",
 	Short: "Pull .env file from GitHub Gist",
@@ -36,36 +33,27 @@ var pullCmd = &cobra.Command{
 	Run:   runPullCommand,
 }
 
-// InitPullCommand sets up the pull command and its subcommands
 func InitPullCommand() {
-	// Initialize the command flags
 	pullCmd.Flags().StringVarP(&pullGistID, "id", "i", "", "GitHub Gist ID to pull from")
 	pullCmd.Flags().StringVarP(&pullOutput, "output", "o", ".env", "Output file path")
 	pullCmd.Flags().BoolVarP(&pullUnmask, "unmask", "u", false, "Decrypt/unmask values when pulling")
 	pullCmd.Flags().BoolVarP(&pullForce, "force", "f", false, "Overwrite existing file without confirmation")
 	pullCmd.Flags().BoolVarP(&pullSelfContained, "self-contained", "s", false, "Pull a self-contained encrypted share")
-	pullCmd.Flags().StringVar(&pullSharePassword, "share-password", "", "Password for decrypting a self-contained encrypted share")
 
-	// Add encryption flags for decryption
 	pullCmd.Flags().BoolVar(&encryption.UseKeyFile, "use-key-file", false, "Use key file instead of password")
 	pullCmd.Flags().StringVarP(&encryption.EncryptionKeyFile, "key-file", "k", ".envi.key", "Path to encryption key file")
-	// Password flag removed for security - passwords should only be entered interactively
 
-	// Add the pull command to the root command
 	rootCmd.AddCommand(pullCmd)
 }
 
-// runPullCommand handles the pull command execution
 func runPullCommand(cmd *cobra.Command, args []string) {
 	logger := utils.GetLogger()
 
-	// Validate output file path for security
 	if err := security.ValidateOutputPath(pullOutput); err != nil {
 		utils.Error("Invalid output file path: %s", err)
 		utils.Fatal("Security validation failed")
 	}
 
-	// Validate key file path if using key file
 	if encryption.UseKeyFile {
 		if err := security.ValidateKeyFilePath(encryption.EncryptionKeyFile); err != nil {
 			utils.Error("Invalid key file path: %s", err)
@@ -73,24 +61,20 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Handle self-contained pull
 	if pullSelfContained {
 		handleSelfContainedPull(cmd)
 		return
 	}
 
-	// Get GitHub token
 	token, err := config.GetGitHubToken()
 	if err != nil {
 		utils.FatalError(err, "getting GitHub token")
 	}
 
-	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		logger.Warn("Could not load config: %s", err)
 	} else {
-		// Apply config defaults
 		if !cmd.Flags().Changed("unmask") && cfg != nil && cfg.UnmaskByDefault {
 			pullUnmask = true
 			logger.Info("Using default setting: Automatically unmasking values")
@@ -107,7 +91,6 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Get Gist ID (from flag or config)
 	if pullGistID == "" && cfg != nil && cfg.LastGistID != "" {
 		useLastID, err := utils.Confirm(
 			"Use saved Gist?",
@@ -123,23 +106,19 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Check if Gist ID is provided
 	if pullGistID == "" {
-		utils.FatalMessage("No Gist ID specified and no saved Gist ID found", "pull")
+		utils.Fatal("No Gist ID specified and no saved Gist ID found")
 	}
 
-	// Create GitHub client
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(cmd.Context(), ts)
 	client := github.NewClient(tc)
 
-	// Get Gist
 	gist, _, err := client.Gists.Get(cmd.Context(), pullGistID)
 	if err != nil {
 		utils.FatalError(err, fmt.Sprintf("retrieving Gist with ID %s", pullGistID))
 	}
 
-	// Find .env file in Gist
 	var envFile *github.GistFile
 	for filename, file := range gist.Files {
 		if string(filename) == ".env" {
@@ -149,13 +128,10 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 	}
 
 	if envFile == nil {
-		utils.FatalMessage("No .env file found in this Gist", "pull")
+		utils.Fatal("No .env file found in this Gist")
 	}
 
-	// Get content
 	envContent := []byte(*envFile.Content)
-
-	// Check if content is encrypted and needs decryption
 	isEncrypted := encryption.IsEncrypted(envContent)
 	isMasked := encryption.IsMasked(envContent)
 
@@ -184,7 +160,6 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		fmt.Println("To decrypt, run 'envi pull --id " + pullGistID + " --unmask'")
 	}
 
-	// Check if output file already exists
 	if _, err := os.Stat(pullOutput); err == nil && !pullForce {
 		var overwrite bool
 
@@ -210,7 +185,6 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Write the file
 	err = os.WriteFile(pullOutput, envContent, 0600)
 	if err != nil {
 		utils.HandleError(utils.WrapFileError(err, fmt.Sprintf("failed to write file %s", pullOutput)), "pull")
@@ -219,11 +193,8 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("Successfully pulled .env file to %s\n", pullOutput)
 
-	// Save the Gist ID to config for future use
 	if cfg != nil {
 		cfg.LastGistID = pullGistID
-
-		// Update usage statistics
 		cfg.UpdateGistUsage(pullGistID)
 
 		if err := config.SaveConfig(cfg); err != nil {
@@ -232,31 +203,25 @@ func runPullCommand(cmd *cobra.Command, args []string) {
 	}
 }
 
-// handleSelfContainedPull handles pulling self-contained encrypted shares
 func handleSelfContainedPull(cmd *cobra.Command) {
-	// Get the share password
 	var sharePassword string
-	if pullSharePassword != "" {
-		sharePassword = pullSharePassword
-	} else {
-		// Prompt for password
-		if encryption.UseTUI {
-			var err error
-			sharePassword, err = tui.GetPassword("Enter password for self-contained share", false)
-			if err != nil {
-				utils.HandleError(utils.WrapInputError(err, "failed to get password for self-contained share"), "pull")
-				return
-			}
-		} else {
-			fmt.Print("Enter password for self-contained share: ")
-			passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-			if err != nil {
-				utils.HandleError(utils.WrapInputError(err, "failed to read password from terminal"), "pull")
-				return
-			}
-			fmt.Println()
-			sharePassword = string(passwordBytes)
+
+	if encryption.UseTUI {
+		var err error
+		sharePassword, err = tui.GetPassword("Enter password for self-contained share", false)
+		if err != nil {
+			utils.HandleError(utils.WrapInputError(err, "failed to get password for self-contained share"), "pull")
+			return
 		}
+	} else {
+		fmt.Print("Enter password for self-contained share: ")
+		passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			utils.HandleError(utils.WrapInputError(err, "failed to read password from terminal"), "pull")
+			return
+		}
+		fmt.Println()
+		sharePassword = string(passwordBytes)
 	}
 
 	if sharePassword == "" {
@@ -264,7 +229,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		return
 	}
 
-	// Get the encrypted content
 	var encryptedContent []byte
 	var err error
 
@@ -279,7 +243,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		}
 		encryptedContent = []byte(textContent)
 	} else {
-		// Use terminal input
 		fmt.Println("Paste the encrypted content from the shared Gist (press Enter when done):")
 		var inputLines []string
 		scanner := bufio.NewScanner(os.Stdin)
@@ -298,7 +261,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		return
 	}
 
-	// Check if it's a self-contained share
 	if !encryption.IsSelfContainedShare(encryptedContent) {
 		if encryption.UseTUI {
 			tui.ShowError(utils.NewValidationError("not a self-contained encrypted share"), "pull")
@@ -311,7 +273,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		return
 	}
 
-	// Decrypt the content
 	fmt.Println("Decrypting self-contained share...")
 	decryptedContent, err := encryption.DecryptSelfContainedShare(encryptedContent, sharePassword)
 	if err != nil {
@@ -327,7 +288,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		return
 	}
 
-	// Check if output file already exists
 	if _, err := os.Stat(pullOutput); err == nil && !pullForce {
 		var overwrite bool
 
@@ -353,7 +313,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 		}
 	}
 
-	// Write the decrypted content
 	err = os.WriteFile(pullOutput, decryptedContent, 0600)
 	if err != nil {
 		utils.HandleError(utils.WrapFileError(err, fmt.Sprintf("failed to write decrypted content to %s", pullOutput)), "pull")
@@ -371,7 +330,6 @@ func handleSelfContainedPull(cmd *cobra.Command) {
 	}
 }
 
-// min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
 		return a

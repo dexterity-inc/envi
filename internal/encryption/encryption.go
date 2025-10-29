@@ -21,7 +21,6 @@ import (
 	"github.com/dexterity-inc/envi/internal/tui"
 )
 
-// Encryption command flags
 var (
 	UseEncryption      bool
 	UseMaskedEncryption bool
@@ -31,64 +30,71 @@ var (
 	UseTUI             bool = true
 )
 
-// Encryption constants
 const (
 	EncryptionPrefix    = "ENVI_ENCRYPTED:"
 	MaskedPrefix        = "ENVI_MASKED:"
-	EncryptionKeyLength = 32 // 256-bit key
+	EncryptionKeyLength = 32
 	
-	// PBKDF2 parameters for secure key derivation
-	PBKDF2Iterations = 100000 // OWASP recommended minimum
-	PBKDF2SaltLength = 16     // 128-bit salt
+	// PBKDF2 parameters (OWASP recommended minimum)
+	PBKDF2Iterations = 100000
+	PBKDF2SaltLength = 16
 )
 
-// InitEncryptionFlags initializes encryption-related flags for commands
 func InitEncryptionFlags(cmd *cobra.Command) {
-	// These flags are added to the root command for all subcommands
 	cmd.PersistentFlags().BoolVar(&UseEncryption, "encrypt", false, "Encrypt data using AES-256")
 	cmd.PersistentFlags().BoolVarP(&UseMaskedEncryption, "mask", "m", false, "Mask values (keep keys visible)")
 	cmd.PersistentFlags().BoolVar(&UseKeyFile, "use-key-file", false, "Use key file instead of password")
 	cmd.PersistentFlags().StringVarP(&EncryptionKeyFile, "key-file", "k", ".envi.key", "Path to encryption key file")
 }
 
-// IsEncrypted checks if content is encrypted with full encryption
 func IsEncrypted(content []byte) bool {
 	return bytes.HasPrefix(content, []byte(EncryptionPrefix))
 }
 
-// IsMasked checks if content is encrypted with masked encryption
 func IsMasked(content []byte) bool {
 	return bytes.Contains(content, []byte(MaskedPrefix))
 }
 
-// EncryptContent encrypts the given content using AES-256-GCM
-func EncryptContent(content []byte) ([]byte, error) {
-	// Get the encryption key
+func createGCMCipher() (cipher.AEAD, error) {
 	key, err := getEncryptionKey()
 	if err != nil {
 		return nil, errors.New("failed to retrieve encryption key")
 	}
 
-	// Create a new AES cipher block
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, errors.New("failed to create AES cipher block")
 	}
 
-	// Create a new GCM
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, errors.New("failed to create GCM")
 	}
 
-	// Create a nonce
+	return gcm, nil
+}
+
+func encryptBytes(gcm cipher.AEAD, data []byte) ([]byte, error) {
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, errors.New("failed to generate nonce")
 	}
 
+	ciphertext := gcm.Seal(nonce, nonce, data, nil)
+	return ciphertext, nil
+}
+
+func EncryptContent(content []byte) ([]byte, error) {
+	gcm, err := createGCMCipher()
+	if err != nil {
+		return nil, err
+	}
+
 	// Encrypt the data
-	ciphertext := gcm.Seal(nonce, nonce, content, nil)
+	ciphertext, err := encryptBytes(gcm, content)
+	if err != nil {
+		return nil, err
+	}
 	
 	// Encode as base64 with prefix
 	result := []byte(EncryptionPrefix + base64.StdEncoding.EncodeToString(ciphertext))
@@ -110,46 +116,20 @@ func DecryptContent(content []byte) ([]byte, error) {
 		return nil, errors.New("invalid encrypted data format")
 	}
 	
-	// Get the encryption key
-	key, err := getEncryptionKey()
-	if err != nil {
-		return nil, errors.New("failed to retrieve encryption key")
-	}
-	
-	// Create a new AES cipher block
-	block, err := aes.NewCipher(key)
+	// Create GCM cipher
+	gcm, err := createGCMCipher()
 	if err != nil {
 		return nil, err
 	}
 	
-	// Create a new GCM
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Verify ciphertext length
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return nil, errors.New("invalid encrypted data: ciphertext too short")
-	}
-	
-	// Extract nonce and ciphertext
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	
-	// Decrypt the data
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, errors.New("decryption failed: invalid password or corrupted data")
-	}
-	
-	return plaintext, nil
+	// Decrypt using helper function
+	return decryptBytes(gcm, ciphertext)
 }
 
 // MaskEnvContent masks the values in a .env file while keeping the keys visible
 func MaskEnvContent(content []byte) ([]byte, error) {
-	// Get the encryption key
-	key, err := getEncryptionKey()
+	// Create GCM cipher once for all values
+	gcm, err := createGCMCipher()
 	if err != nil {
 		return nil, err
 	}
@@ -182,26 +162,11 @@ func MaskEnvContent(content []byte) ([]byte, error) {
 			continue
 		}
 		
-		// Create a new AES cipher block
-		block, err := aes.NewCipher(key)
+		// Encrypt the value using helper function
+		ciphertext, err := encryptBytes(gcm, []byte(v))
 		if err != nil {
 			return nil, err
 		}
-		
-		// Create a new GCM
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-		
-		// Create a nonce
-		nonce := make([]byte, gcm.NonceSize())
-		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			return nil, err
-		}
-		
-		// Encrypt the value
-		ciphertext := gcm.Seal(nonce, nonce, []byte(v), nil)
 		
 		// Encode as base64
 		maskedValue := MaskedPrefix + base64.StdEncoding.EncodeToString(ciphertext)
@@ -213,10 +178,30 @@ func MaskEnvContent(content []byte) ([]byte, error) {
 	return []byte(strings.Join(maskedLines, "\n")), nil
 }
 
+// decryptBytes decrypts data using the provided GCM cipher
+func decryptBytes(gcm cipher.AEAD, ciphertext []byte) ([]byte, error) {
+	// Verify ciphertext length
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return nil, errors.New("invalid encrypted data: ciphertext too short")
+	}
+	
+	// Extract nonce and ciphertext
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	
+	// Decrypt the data
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, errors.New("decryption failed: invalid password or corrupted data")
+	}
+	
+	return plaintext, nil
+}
+
 // UnmaskEnvContent unmasks the values in a masked .env file
 func UnmaskEnvContent(content []byte) ([]byte, error) {
-	// Get the encryption key
-	key, err := getEncryptionKey()
+	// Create GCM cipher once for all values
+	gcm, err := createGCMCipher()
 	if err != nil {
 		return nil, err
 	}
@@ -258,29 +243,8 @@ func UnmaskEnvContent(content []byte) ([]byte, error) {
 			return nil, errors.New("invalid masked data format")
 		}
 		
-		// Create a new AES cipher block
-		block, err := aes.NewCipher(key)
-		if err != nil {
-			return nil, err
-		}
-		
-		// Create a new GCM
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return nil, err
-		}
-		
-		// Verify ciphertext length
-		nonceSize := gcm.NonceSize()
-		if len(ciphertext) < nonceSize {
-			return nil, errors.New("invalid masked data: ciphertext too short")
-		}
-		
-		// Extract nonce and ciphertext
-		nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-		
-		// Decrypt the value
-		plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+		// Decrypt the value using helper function
+		plaintext, err := decryptBytes(gcm, ciphertext)
 		if err != nil {
 			return nil, errors.New("unmasking failed: invalid password or corrupted data")
 		}
@@ -402,6 +366,24 @@ func DecryptSelfContainedShare(content []byte, password string) ([]byte, error) 
 	
 	// Decrypt using the standard decryption method
 	return DecryptContent(content)
+}
+
+// GenerateSelfContainedShare creates a self-contained encrypted share with the given password
+func GenerateSelfContainedShare(content []byte, password string) ([]byte, error) {
+	// Temporarily store the current password and settings
+	originalPassword := EncryptionPassword
+	originalUseKeyFile := UseKeyFile
+	defer func() {
+		EncryptionPassword = originalPassword
+		UseKeyFile = originalUseKeyFile
+	}()
+	
+	// Set the provided password and disable key file usage
+	EncryptionPassword = password
+	UseKeyFile = false
+	
+	// Encrypt using the standard encryption method
+	return EncryptContent(content)
 }
 
 // GenerateKeyFile creates a new encryption key file with random data

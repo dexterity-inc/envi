@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +20,6 @@ import (
 	"github.com/dexterity-inc/envi/internal/utils"
 )
 
-// Share command flags
 var (
 	shareGistID           string
 	shareWithUsers        []string
@@ -34,7 +33,6 @@ var (
 	shareGeneratePassword bool
 )
 
-// shareCmd is the share command
 var shareCmd = &cobra.Command{
 	Use:   "share",
 	Short: "Share .env file with other users",
@@ -42,9 +40,7 @@ var shareCmd = &cobra.Command{
 	Run:   runShareCommand,
 }
 
-// InitShareCommand sets up the share command and its subcommands
 func InitShareCommand() {
-	// Initialize the command flags
 	shareCmd.Flags().StringVarP(&shareGistID, "id", "i", "", "GitHub Gist ID to share")
 	shareCmd.Flags().StringSliceVarP(&shareWithUsers, "users", "u", []string{}, "GitHub usernames to share with (comma-separated)")
 	shareCmd.Flags().BoolVarP(&shareReadOnlyAccess, "readonly", "r", true, "Share with read-only access")
@@ -53,23 +49,18 @@ func InitShareCommand() {
 	shareCmd.Flags().BoolVar(&shareGenerateKeyFile, "generate-key", false, "Generate a key file for encryption")
 	shareCmd.Flags().StringVar(&shareOutputKeyFile, "key-output", "", "Output path for generated key file (default: .envi-share.key)")
 	shareCmd.Flags().BoolVar(&shareSelfContained, "self-contained", false, "Share environment variables in a self-contained format")
-	shareCmd.Flags().StringVar(&sharePassword, "password", "", "Password for self-contained sharing")
 	shareCmd.Flags().BoolVar(&shareGeneratePassword, "generate-password", false, "Generate a password for self-contained sharing")
 
-	// Add the share command to the root command
 	rootCmd.AddCommand(shareCmd)
 }
 
-// runShareCommand handles the share command execution
 func runShareCommand(cmd *cobra.Command, args []string) {
 	logger := utils.GetLogger()
-	// Get GitHub token
 	token, err := config.GetGitHubToken()
 	if err != nil {
 		utils.FatalError(err, "getting GitHub token")
 	}
 
-	// Load config and apply defaults
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		logger.Warn("Could not load config: %s", err)
@@ -77,16 +68,13 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 		applyEncryptionDefaults(cmd, cfg)
 	}
 
-	// Get Gist ID (from flag or config)
 	gistID := getGistID(cfg)
 
-	// Handle self-contained sharing
 	if shareSelfContained {
 		handleSelfContainedSharing(cmd, token, gistID)
 		return
 	}
 
-	// Generate key file if requested
 	var keyFilePath string
 	if shareGenerateKeyFile {
 		keyFilePath, err = generateKeyFileForSharing()
@@ -94,7 +82,6 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 			utils.FatalError(err, "generating key file")
 		}
 
-		// Force encryption with key file when generating a key
 		encryption.UseEncryption = true
 		encryption.UseKeyFile = true
 		encryption.EncryptionKeyFile = keyFilePath
@@ -102,7 +89,6 @@ func runShareCommand(cmd *cobra.Command, args []string) {
 		logger.Info("Using generated key file: %s", keyFilePath)
 	}
 
-	// Prepare environment content if needed
 	envContent, err := prepareEnvContent()
 	if err != nil {
 		utils.FatalError(err, "preparing environment content")
@@ -173,7 +159,7 @@ func getGistID(cfg *config.Config) string {
 	logger := utils.GetLogger()
 	if shareGistID == "" {
 		if cfg.LastGistID == "" {
-			utils.FatalMessage("No Gist ID specified and no saved Gist ID found", "share")
+			utils.Fatal("No Gist ID specified and no saved Gist ID found")
 		}
 		shareGistID = cfg.LastGistID
 		logger.Info("Using saved Gist ID: %s", shareGistID)
@@ -332,8 +318,6 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 		fmt.Println("Generated a secure password for sharing.")
 		fmt.Println("IMPORTANT: Save this password securely - it's needed to decrypt the shared content!")
 		fmt.Println("Password has been generated. Please save it securely.")
-	} else if sharePassword != "" {
-		sharePass = sharePassword
 	} else {
 		// Prompt for password
 		if encryption.UseTUI {
@@ -431,12 +415,26 @@ func handleSelfContainedSharing(cmd *cobra.Command, token, gistID string) {
 	}
 }
 
-// generateSecurePassword generates a secure random password
+// generateSecurePassword generates a secure random password using crypto/rand
 func generateSecurePassword() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
-	password := make([]byte, 16)
-	for i := range password {
-		password[i] = charset[rand.Intn(len(charset))]
+	const passwordLength = 16
+	
+	password := make([]byte, passwordLength)
+	// Use crypto/rand for cryptographically secure random bytes
+	randomBytes := make([]byte, passwordLength)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to a timestamp-based approach if crypto/rand fails
+		// This should never happen in practice
+		for i := range password {
+			password[i] = charset[i%len(charset)]
+		}
+		return string(password)
+	}
+	
+	// Map random bytes to charset
+	for i, b := range randomBytes {
+		password[i] = charset[int(b)%len(charset)]
 	}
 	return string(password)
 }

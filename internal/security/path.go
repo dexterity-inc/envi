@@ -25,100 +25,80 @@ func SanitizeFilePath(path string) (string, error) {
 		return "", ErrEmptyPath
 	}
 
-	// Clean the path to resolve any . and .. components
-	cleaned := filepath.Clean(path)
+	cleanPath := filepath.Clean(path)
 
 	// Check for absolute paths (Unix-style)
-	if filepath.IsAbs(cleaned) {
+	if filepath.IsAbs(cleanPath) {
 		return "", ErrAbsolutePath
 	}
 
 	// Check for Windows-style absolute paths (even on non-Windows systems)
-	if len(cleaned) >= 3 && cleaned[1] == ':' && (cleaned[2] == '\\' || cleaned[2] == '/') {
+	if len(cleanPath) >= 3 && cleanPath[1] == ':' && (cleanPath[2] == '\\' || cleanPath[2] == '/') {
 		return "", ErrAbsolutePath
 	}
 
 	// Check for directory traversal attempts
-	if strings.Contains(cleaned, "..") {
+	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, string(filepath.Separator)+"..") {
 		return "", ErrPathTraversal
 	}
 
 	// Check for paths that would escape the current directory
-	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "\\") {
+	if strings.HasPrefix(cleanPath, "/") || strings.HasPrefix(cleanPath, "\\") {
 		return "", ErrPathTraversal
 	}
 
-	// Additional check: ensure the cleaned path doesn't start with ..
-	if strings.HasPrefix(cleaned, "..") {
-		return "", ErrPathTraversal
-	}
-
-	return cleaned, nil
+	return cleanPath, nil
 }
 
-// ValidateOutputPath validates a user-provided output file path
-// It allows specific safe directories and prevents dangerous locations
+func checkDangerousPath(path string) error {
+	dangerousPaths := []string{
+		"/etc/", "/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/",
+		"/System/", "/Library/", "/var/", "/tmp/", "/boot/",
+		"/proc/", "/sys/",
+	}
+
+	for _, dangerous := range dangerousPaths {
+		if strings.HasPrefix(path, dangerous) {
+			return fmt.Errorf("access to system directory %s is not allowed", dangerous)
+		}
+	}
+	return nil
+}
+
 func ValidateOutputPath(path string) error {
 	sanitized, err := SanitizeFilePath(path)
 	if err != nil {
 		return fmt.Errorf("invalid output path: %w", err)
 	}
 
-	// Check for attempts to write to sensitive directories
-	dangerousPaths := []string{
-		"/etc/",
-		"/bin/",
-		"/sbin/",
-		"/usr/bin/",
-		"/usr/sbin/",
-		"/System/",
-		"/Library/",
-		"/var/",
-		"/tmp/",
-		"/dev/",
-		"/proc/",
-		"/sys/",
-	}
-
-	// Convert to absolute path for checking
-	absPath, err := filepath.Abs(sanitized)
-	if err != nil {
-		return fmt.Errorf("error resolving path: %w", err)
-	}
-
-	for _, dangerous := range dangerousPaths {
-		if strings.HasPrefix(absPath, dangerous) {
-			return fmt.Errorf("writing to system directory %s is not allowed", dangerous)
-		}
-	}
-
-	return nil
+	return checkDangerousPath(sanitized)
 }
 
 // ValidateInputPath validates a user-provided input file path
-// It ensures the path is safe to read from
 func ValidateInputPath(path string) error {
 	sanitized, err := SanitizeFilePath(path)
 	if err != nil {
 		return fmt.Errorf("invalid input path: %w", err)
 	}
 
-	// Additional validation can be added here if needed
-	_ = sanitized
-
-	return nil
+	return checkDangerousPath(sanitized)
 }
 
-// ValidateKeyFilePath validates a user-provided key file path
-// It applies stricter validation for key files
+// ValidateKeyFilePath validates a key file path
+// Security note: Key files should not be in publicly accessible or temporary locations
 func ValidateKeyFilePath(path string) error {
 	sanitized, err := SanitizeFilePath(path)
 	if err != nil {
 		return fmt.Errorf("invalid key file path: %w", err)
 	}
 
-	// Key files should not be in certain directories for security
-	if strings.Contains(sanitized, "/tmp/") || strings.Contains(sanitized, "\\tmp\\") {
+	if err := checkDangerousPath(sanitized); err != nil {
+		return err
+	}
+
+	// Additional check: key files shouldn't be in temp directories
+	lowerPath := strings.ToLower(sanitized)
+	if strings.Contains(lowerPath, "/tmp/") || strings.Contains(lowerPath, "\\tmp\\") {
 		return errors.New("key files should not be stored in temporary directories")
 	}
 
@@ -153,13 +133,11 @@ func ValidateEnvVarName(name string) error {
 		return ErrEnvVarTooLong
 	}
 
-	// Check for valid POSIX environment variable name pattern
 	envVarRegex := regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 	if !envVarRegex.MatchString(name) {
 		return ErrInvalidEnvVarName
 	}
 
-	// Check for potentially dangerous names (reserved or system variables)
 	dangerousNames := []string{
 		"PATH", "HOME", "USER", "SHELL", "PWD", "OLDPWD",
 		"IFS", "PS1", "PS2", "PS3", "PS4",
@@ -183,29 +161,9 @@ func ValidateEnvVarValue(value string) error {
 		return ErrEnvVarTooLong
 	}
 
-	// Check for control characters (except tab, newline, carriage return)
 	for _, r := range value {
 		if unicode.IsControl(r) && r != '\t' && r != '\n' && r != '\r' {
 			return fmt.Errorf("environment variable value contains invalid control character: %U", r)
-		}
-	}
-
-	// Check for potentially dangerous patterns
-	dangerousPatterns := []string{
-		"$(",    // Command substitution
-		"`",     // Command substitution
-		"${",    // Variable expansion
-		";",     // Command separator
-		"&&",    // Command chaining
-		"||",    // Command chaining
-		"|",     // Pipe
-		">",     // Redirection
-		"<",     // Redirection
-	}
-
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(value, pattern) {
-			return fmt.Errorf("environment variable value contains potentially dangerous pattern: %s", pattern)
 		}
 	}
 
@@ -215,13 +173,11 @@ func ValidateEnvVarValue(value string) error {
 // ValidateEnvLine validates a complete environment variable line (KEY=VALUE format)
 func ValidateEnvLine(line string) error {
 	line = strings.TrimSpace(line)
-	
-	// Skip empty lines and comments
+
 	if line == "" || strings.HasPrefix(line, "#") {
 		return nil
 	}
 
-	// Check for valid KEY=VALUE format
 	if !strings.Contains(line, "=") {
 		return errors.New("invalid environment variable format: missing '=' separator")
 	}
@@ -232,14 +188,12 @@ func ValidateEnvLine(line string) error {
 	}
 
 	name := strings.TrimSpace(parts[0])
-	value := parts[1] // Don't trim value as it may have intentional whitespace
+	value := parts[1]
 
-	// Validate name
 	if err := ValidateEnvVarName(name); err != nil {
 		return fmt.Errorf("invalid variable name '%s': %w", name, err)
 	}
 
-	// Validate value
 	if err := ValidateEnvVarValue(value); err != nil {
 		return fmt.Errorf("invalid variable value for '%s': %w", name, err)
 	}

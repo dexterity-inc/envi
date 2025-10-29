@@ -11,6 +11,12 @@ const (
 	TimeFormatShort = "2006-01-02 15:04:05"
 )
 
+// File permission constants
+const (
+	// EnvFilePerms is the recommended secure file permissions for .env files (rw-------)
+	EnvFilePerms = 0600
+)
+
 // Logger provides logging functionality for the envi CLI
 type Logger struct {
 	useTUI bool
@@ -170,6 +176,14 @@ func WrapInputError(err error, context string) error {
 	return fmt.Errorf("%s: %w", context, err)
 }
 
+// WrapGitHubError wraps GitHub API related errors with context (nil-safe)
+func WrapGitHubError(err error, context string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}
+
 // DefaultKeyFile returns the default key file path
 func DefaultKeyFile() string {
 	return "envi.key"
@@ -185,4 +199,3 @@ func Confirm(title, message string) (bool, error) {
 	}
 	return response == "y" || response == "Y" || response == "yes" || response == "Yes", nil
 }
-

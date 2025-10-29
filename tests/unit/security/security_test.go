@@ -219,34 +219,44 @@ func TestValidateEnvVarValue(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "value with command substitution",
+			name:        "value with command substitution (allowed - used in URLs, scripts)",
 			value:       "$(dangerous command)",
-			expectError: true,
+			expectError: false, // Changed: legitimate use in scripts, connection strings
 		},
 		{
-			name:        "value with backticks",
+			name:        "value with backticks (allowed - used in markdown, scripts)",
 			value:       "`dangerous command`",
-			expectError: true,
+			expectError: false, // Changed: legitimate use in markdown, documentation
 		},
 		{
-			name:        "value with variable expansion",
+			name:        "value with variable expansion (allowed - used in templates)",
 			value:       "${OTHER_VAR}",
-			expectError: true,
+			expectError: false, // Changed: legitimate use in templates, variable interpolation
 		},
 		{
-			name:        "value with semicolon",
-			value:       "value; rm -rf /",
-			expectError: true,
+			name:        "value with semicolon (allowed - used in connection strings)",
+			value:       "Server=localhost;Database=mydb;User=sa",
+			expectError: false, // Changed: legitimate use in connection strings, SQL
 		},
 		{
-			name:        "value with pipe",
-			value:       "value | dangerous_command",
-			expectError: true,
+			name:        "value with pipe (allowed - used in commands, data processing)",
+			value:       "command | grep pattern",
+			expectError: false, // Changed: legitimate use in shell commands, pipelines
 		},
 		{
-			name:        "value with redirection",
-			value:       "value > /etc/passwd",
-			expectError: true,
+			name:        "value with redirection (allowed - used in shell commands)",
+			value:       "command > output.txt",
+			expectError: false, // Changed: legitimate use in shell commands
+		},
+		{
+			name:        "URL with query parameters",
+			value:       "https://api.example.com/data?key=value&token=abc123",
+			expectError: false,
+		},
+		{
+			name:        "JSON value",
+			value:       `{"key": "value", "nested": {"data": [1, 2, 3]}}`,
+			expectError: false,
 		},
 		{
 			name:        "very long value",
@@ -319,9 +329,9 @@ func TestValidateEnvLine(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "line with dangerous value",
-			line:        "COMMAND=$(rm -rf /)",
-			expectError: true,
+			name:        "line with command substitution (allowed)",
+			line:        "COMMAND=$(echo hello)",
+			expectError: false, // Changed: legitimate use in scripts
 		},
 		{
 			name:        "line with system variable",
