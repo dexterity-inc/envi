@@ -2,6 +2,7 @@ package security
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -673,6 +674,246 @@ func TestCreateSafeError(t *testing.T) {
 				t.Errorf("CreateSafeError(%q) should not return nil", tt.operation)
 			} else if result.Error() != tt.expected {
 				t.Errorf("CreateSafeError(%q) = %q, expected %q", tt.operation, result.Error(), tt.expected)
+			}
+		})
+	}
+}
+
+func TestCheckDangerousPath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+	}{
+		{
+			name:        "safe relative path",
+			path:        "config/app.env",
+			expectError: false,
+		},
+		{
+			name:        "safe nested path",
+			path:        "project/data/values.txt",
+			expectError: false,
+		},
+		{
+			name:        "dangerous /etc/ path",
+			path:        "/etc/passwd",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /bin/ path",
+			path:        "/bin/bash",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /sbin/ path",
+			path:        "/sbin/init",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /usr/bin/ path",
+			path:        "/usr/bin/env",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /usr/sbin/ path",
+			path:        "/usr/sbin/systemd",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /System/ path (macOS)",
+			path:        "/System/Library/CoreServices",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /Library/ path (macOS)",
+			path:        "/Library/Preferences",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /var/ path",
+			path:        "/var/log/system.log",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /tmp/ path",
+			path:        "/tmp/sensitive",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /boot/ path",
+			path:        "/boot/grub",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /proc/ path",
+			path:        "/proc/cpuinfo",
+			expectError: true,
+		},
+		{
+			name:        "dangerous /sys/ path",
+			path:        "/sys/devices",
+			expectError: true,
+		},
+		{
+			name:        "empty path",
+			path:        "",
+			expectError: false,
+		},
+		{
+			name:        "current directory",
+			path:        ".",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkDangerousPath(tt.path)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("checkDangerousPath(%q) expected error but got none", tt.path)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("checkDangerousPath(%q) unexpected error: %v", tt.path, err)
+				}
+			}
+		})
+	}
+}
+
+func TestSanitizeFilePathEdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:        "path with multiple slashes",
+			input:       "config//env.json",
+			expected:    "config/env.json",
+			expectError: false,
+		},
+		{
+			name:        "path with trailing slash",
+			input:       "config/",
+			expected:    "config",
+			expectError: false,
+		},
+		{
+			name:        "path with leading dot slash",
+			input:       "./config/env.json",
+			expected:    "config/env.json",
+			expectError: false,
+		},
+		{
+			name:        "complex traversal attempt",
+			input:       "config/../../../../../../etc/passwd",
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "Windows UNC path",
+			input:       "\\\\server\\share\\file.txt",
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "valid nested path",
+			input:       "config/subdir/file.env",
+			expected:    "config/subdir/file.env",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := SanitizeFilePath(tt.input)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected an error for input %q, but got none", tt.input)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for input %q: %v", tt.input, err)
+				}
+				if result != tt.expected {
+					t.Errorf("Expected %q, got %q for input %q", tt.expected, result, tt.input)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateEnvVarNameExtended(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+	}{
+		{
+			name:        "valid name with underscores",
+			input:       "_PRIVATE_VAR",
+			expectError: false,
+		},
+		{
+			name:        "valid name with numbers",
+			input:       "VAR_123_TEST",
+			expectError: false,
+		},
+		{
+			name:        "name with hyphen",
+			input:       "MY-VAR",
+			expectError: true,
+		},
+		{
+			name:        "name with space",
+			input:       "MY VAR",
+			expectError: true,
+		},
+		{
+			name:        "name with special characters",
+			input:       "VAR@EMAIL",
+			expectError: true,
+		},
+		{
+			name:        "very long name",
+			input:       string(make([]byte, MaxEnvVarNameLength+1)),
+			expectError: true,
+		},
+		{
+			name:        "name at max length",
+			input:       strings.Repeat("A", MaxEnvVarNameLength),
+			expectError: false,
+		},
+		{
+			name:        "dangerous LD_PRELOAD",
+			input:       "LD_PRELOAD",
+			expectError: true,
+		},
+		{
+			name:        "dangerous LD_LIBRARY_PATH",
+			input:       "LD_LIBRARY_PATH",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEnvVarName(tt.input)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected an error for input %q, but got none", tt.input)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for input %q: %v", tt.input, err)
+				}
 			}
 		})
 	}

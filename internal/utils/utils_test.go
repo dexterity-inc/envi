@@ -368,4 +368,187 @@ func TestPackageConstants(t *testing.T) {
 	if TimeFormatShort != expected {
 		t.Errorf("TimeFormatShort = %q, expected %q", TimeFormatShort, expected)
 	}
+	
+	// Test EnvFilePerms constant
+	if EnvFilePerms != 0600 {
+		t.Errorf("EnvFilePerms = %o, expected 0600", EnvFilePerms)
+	}
+}
+
+func TestWrapFileError(t *testing.T) {
+	// Test with nil error
+	result := WrapFileError(nil, "test context")
+	if result != nil {
+		t.Error("WrapFileError(nil, context) should return nil")
+	}
+	
+	// Test with non-nil error
+	originalErr := errors.New("file not found")
+	wrappedErr := WrapFileError(originalErr, "reading config file")
+	if wrappedErr == nil {
+		t.Error("WrapFileError should return non-nil for non-nil error")
+	}
+	
+	expectedMsg := "reading config file: file not found"
+	if wrappedErr.Error() != expectedMsg {
+		t.Errorf("WrapFileError() = %q, expected %q", wrappedErr.Error(), expectedMsg)
+	}
+	
+	// Verify error wrapping
+	if !errors.Is(wrappedErr, originalErr) {
+		t.Error("Wrapped error should contain original error")
+	}
+}
+
+func TestWrapEncryptionError(t *testing.T) {
+	// Test with nil error
+	result := WrapEncryptionError(nil, "test context")
+	if result != nil {
+		t.Error("WrapEncryptionError(nil, context) should return nil")
+	}
+	
+	// Test with non-nil error
+	originalErr := errors.New("invalid key")
+	wrappedErr := WrapEncryptionError(originalErr, "decrypting content")
+	if wrappedErr == nil {
+		t.Error("WrapEncryptionError should return non-nil for non-nil error")
+	}
+	
+	expectedMsg := "decrypting content: invalid key"
+	if wrappedErr.Error() != expectedMsg {
+		t.Errorf("WrapEncryptionError() = %q, expected %q", wrappedErr.Error(), expectedMsg)
+	}
+	
+	// Verify error wrapping
+	if !errors.Is(wrappedErr, originalErr) {
+		t.Error("Wrapped error should contain original error")
+	}
+}
+
+func TestWrapGitHubError(t *testing.T) {
+	// Test with nil error
+	result := WrapGitHubError(nil, "test context")
+	if result != nil {
+		t.Error("WrapGitHubError(nil, context) should return nil")
+	}
+	
+	// Test with non-nil error
+	originalErr := errors.New("API rate limit exceeded")
+	wrappedErr := WrapGitHubError(originalErr, "fetching gist")
+	if wrappedErr == nil {
+		t.Error("WrapGitHubError should return non-nil for non-nil error")
+	}
+	
+	expectedMsg := "fetching gist: API rate limit exceeded"
+	if wrappedErr.Error() != expectedMsg {
+		t.Errorf("WrapGitHubError() = %q, expected %q", wrappedErr.Error(), expectedMsg)
+	}
+	
+	// Verify error wrapping
+	if !errors.Is(wrappedErr, originalErr) {
+		t.Error("Wrapped error should contain original error")
+	}
+}
+
+func TestNewInputError(t *testing.T) {
+	// Test with simple message
+	err := NewInputError("invalid input")
+	if err == nil {
+		t.Error("NewInputError should return non-nil error")
+	}
+	
+	expected := "input error: invalid input"
+	if err.Error() != expected {
+		t.Errorf("NewInputError() = %q, expected %q", err.Error(), expected)
+	}
+	
+	// Test with empty message
+	err2 := NewInputError("")
+	if err2 == nil {
+		t.Error("NewInputError should return non-nil error even for empty message")
+	}
+	
+	// Test with formatted message
+	err3 := NewInputError("value out of range: expected 1-100")
+	if err3 == nil {
+		t.Error("NewInputError should return non-nil error")
+	}
+}
+
+func TestNewValidationError(t *testing.T) {
+	// Test with simple message
+	err := NewValidationError("validation failed")
+	if err == nil {
+		t.Error("NewValidationError should return non-nil error")
+	}
+	
+	expected := "validation error: validation failed"
+	if err.Error() != expected {
+		t.Errorf("NewValidationError() = %q, expected %q", err.Error(), expected)
+	}
+	
+	// Test with empty message
+	err2 := NewValidationError("")
+	if err2 == nil {
+		t.Error("NewValidationError should return non-nil error even for empty message")
+	}
+	
+	// Test with specific validation message
+	err3 := NewValidationError("field 'email' is required")
+	if err3 == nil {
+		t.Error("NewValidationError should return non-nil error")
+	}
+}
+
+func TestLoggerInstanceMethods(t *testing.T) {
+	logger := GetLogger()
+	
+	// Test that instance methods don't panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Logger instance method panicked: %v", r)
+		}
+	}()
+	
+	logger.Info("test info from instance")
+	logger.Success("test success from instance")
+	logger.Error("test error from instance")
+	logger.Warn("test warning from instance")
+	
+	// Test with formatted messages
+	logger.Info("formatted info: %s", "test")
+	logger.Success("formatted success: %d", 42)
+	logger.Error("formatted error: %v", errors.New("test"))
+	logger.Warn("formatted warning: %.2f", 3.14)
+}
+
+func TestErrorWrappingChain(t *testing.T) {
+	// Test chaining multiple error wrappers
+	baseErr := errors.New("base error")
+	
+	wrappedOnce := WrapFileError(baseErr, "first wrap")
+	wrappedTwice := WrapInputError(wrappedOnce, "second wrap")
+	wrappedThrice := WrapEncryptionError(wrappedTwice, "third wrap")
+	
+	// Verify the error chain is maintained
+	if !errors.Is(wrappedThrice, baseErr) {
+		t.Error("Error chain should maintain original base error")
+	}
+	
+	// Verify error message contains all contexts
+	errMsg := wrappedThrice.Error()
+	if errMsg == "" {
+		t.Error("Error message should not be empty")
+	}
+}
+
+func TestHandleErrorWithNilError(t *testing.T) {
+	// Verify HandleError gracefully handles nil
+	HandleError(nil, "should not log anything")
+	
+	// Verify HandleError works with various error types
+	HandleError(errors.New("simple error"), "simple")
+	HandleError(fmt.Errorf("wrapped: %w", errors.New("base")), "wrapped")
+	HandleError(NewInputError("input"), "input error")
+	HandleError(NewValidationError("validation"), "validation error")
 }

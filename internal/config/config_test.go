@@ -520,3 +520,319 @@ func TestConfigEdgeCases(t *testing.T) {
 		t.Errorf("Expected usage count 2, got %d", retrieved.UsageCount)
 	}
 }
+
+func TestGetEnvironmentFromFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		expected string
+	}{
+		{
+			name:     "default env file",
+			filename: ".env",
+			expected: "default",
+		},
+		{
+			name:     "production env file",
+			filename: ".env.production",
+			expected: "production",
+		},
+		{
+			name:     "development env file",
+			filename: ".env.development",
+			expected: "development",
+		},
+		{
+			name:     "staging env file",
+			filename: ".env.staging",
+			expected: "staging",
+		},
+		{
+			name:     "test env file",
+			filename: ".env.test",
+			expected: "test",
+		},
+		{
+			name:     "custom env file",
+			filename: ".env.custom-name",
+			expected: "custom-name",
+		},
+		{
+			name:     "env file without prefix",
+			filename: "config.env",
+			expected: "default",
+		},
+		{
+			name:     "empty filename",
+			filename: "",
+			expected: "default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetEnvironmentFromFilename(tt.filename)
+			if result != tt.expected {
+				t.Errorf("GetEnvironmentFromFilename(%q) = %q, expected %q", tt.filename, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateGistDescription(t *testing.T) {
+	tests := []struct {
+		name        string
+		envFile     string
+		projectName string
+		environment string
+		encrypted   bool
+		expected    string
+	}{
+		{
+			name:        "basic project with default environment",
+			envFile:     ".env",
+			projectName: "myproject",
+			environment: "default",
+			encrypted:   false,
+			expected:    "myproject environment variables - Created with envi",
+		},
+		{
+			name:        "project with production environment",
+			envFile:     ".env.production",
+			projectName: "myproject",
+			environment: "production",
+			encrypted:   false,
+			expected:    "myproject production environment variables - Created with envi",
+		},
+		{
+			name:        "encrypted project",
+			envFile:     ".env",
+			projectName: "myproject",
+			environment: "default",
+			encrypted:   true,
+			expected:    "myproject environment variables (encrypted) - Created with envi",
+		},
+		{
+			name:        "no project name",
+			envFile:     ".env",
+			projectName: "",
+			environment: "default",
+			encrypted:   false,
+			expected:    "environment variables - Created with envi",
+		},
+		{
+			name:        "staging environment encrypted",
+			envFile:     ".env.staging",
+			projectName: "api-service",
+			environment: "staging",
+			encrypted:   true,
+			expected:    "api-service staging environment variables (encrypted) - Created with envi",
+		},
+		{
+			name:        "development environment",
+			envFile:     ".env.development",
+			projectName: "web-app",
+			environment: "development",
+			encrypted:   false,
+			expected:    "web-app development environment variables - Created with envi",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateGistDescription(tt.envFile, tt.projectName, tt.environment, tt.encrypted)
+			if result != tt.expected {
+				t.Errorf("GenerateGistDescription() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestConfigConstants(t *testing.T) {
+	// Test that constants are defined correctly
+	if applicationName != "envi-cli" {
+		t.Errorf("applicationName = %q, expected 'envi-cli'", applicationName)
+	}
+	
+	if tokenUsername != "github-token" {
+		t.Errorf("tokenUsername = %q, expected 'github-token'", tokenUsername)
+	}
+	
+	if configFilePerms != 0600 {
+		t.Errorf("configFilePerms = %o, expected 0600", configFilePerms)
+	}
+}
+
+func TestGistInfoStruct(t *testing.T) {
+	// Test GistInfo struct creation and fields
+	gist := &GistInfo{
+		ID:          "test-123",
+		Name:        "Test Gist",
+		Description: "A test gist description",
+		CreatedAt:   "2023-01-01 12:00:00",
+		UpdatedAt:   "2023-01-01 12:30:00",
+		LastUsed:    "2023-01-01 13:00:00",
+		UsageCount:  5,
+		IsEncrypted: true,
+		IsPublic:    false,
+		FileCount:   2,
+		URL:         "https://gist.github.com/test-123",
+		ProjectName: "my-project",
+		Environment: "production",
+		Tags:        []string{"backend", "api"},
+	}
+	
+	if gist.ID != "test-123" {
+		t.Errorf("GistInfo.ID = %q, expected 'test-123'", gist.ID)
+	}
+	
+	if gist.UsageCount != 5 {
+		t.Errorf("GistInfo.UsageCount = %d, expected 5", gist.UsageCount)
+	}
+	
+	if !gist.IsEncrypted {
+		t.Error("GistInfo.IsEncrypted should be true")
+	}
+	
+	if gist.IsPublic {
+		t.Error("GistInfo.IsPublic should be false")
+	}
+	
+	if len(gist.Tags) != 2 {
+		t.Errorf("GistInfo.Tags length = %d, expected 2", len(gist.Tags))
+	}
+}
+
+func TestProjectInfoStruct(t *testing.T) {
+	// Test ProjectInfo struct creation and fields
+	project := &ProjectInfo{
+		Name:         "Test Project",
+		Path:         "/home/user/projects/test",
+		CreatedAt:    "2023-01-01 10:00:00",
+		LastUsed:     "2023-01-02 14:30:00",
+		Environments: []string{"development", "staging", "production"},
+		GistIDs:      []string{"gist-1", "gist-2", "gist-3"},
+	}
+	
+	if project.Name != "Test Project" {
+		t.Errorf("ProjectInfo.Name = %q, expected 'Test Project'", project.Name)
+	}
+	
+	if len(project.Environments) != 3 {
+		t.Errorf("ProjectInfo.Environments length = %d, expected 3", len(project.Environments))
+	}
+	
+	if len(project.GistIDs) != 3 {
+		t.Errorf("ProjectInfo.GistIDs length = %d, expected 3", len(project.GistIDs))
+	}
+}
+
+func TestConfigSaveAndLoadWithComplexData(t *testing.T) {
+	// Save original HOME to restore later
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	
+	// Create a temporary directory
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	
+	// Create a complex config with all fields populated
+	config := &Config{
+		GitHubToken:         "",
+		LastGistID:          "complex-gist-123",
+		TokenInKeyring:      true,
+		EncryptByDefault:    true,
+		UseMaskedEncryption: false,
+		UnmaskByDefault:     true,
+		DefaultKeyFile:      "/path/to/key.file",
+		UseKeyFileByDefault: true,
+		GistHistory: map[string]*GistInfo{
+			"gist-1": {
+				ID:          "gist-1",
+				Name:        "First Gist",
+				Description: "Description 1",
+				UsageCount:  10,
+				IsEncrypted: true,
+				Tags:        []string{"tag1", "tag2"},
+			},
+			"gist-2": {
+				ID:          "gist-2",
+				Name:        "Second Gist",
+				Description: "Description 2",
+				UsageCount:  5,
+				IsPublic:    true,
+			},
+		},
+		Projects: map[string]*ProjectInfo{
+			"project-1": {
+				Name:         "Project One",
+				Path:         "/path/to/project1",
+				Environments: []string{"dev", "prod"},
+				GistIDs:      []string{"gist-1"},
+			},
+		},
+	}
+	
+	// Save the config
+	err := SaveConfig(config)
+	if err != nil {
+		t.Fatalf("SaveConfig() failed: %v", err)
+	}
+	
+	// Load it back
+	loadedConfig, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+	
+	// Verify all fields
+	if loadedConfig.LastGistID != config.LastGistID {
+		t.Errorf("LastGistID mismatch: got %q, want %q", loadedConfig.LastGistID, config.LastGistID)
+	}
+	
+	if loadedConfig.TokenInKeyring != config.TokenInKeyring {
+		t.Error("TokenInKeyring mismatch")
+	}
+	
+	if loadedConfig.UnmaskByDefault != config.UnmaskByDefault {
+		t.Error("UnmaskByDefault mismatch")
+	}
+	
+	if loadedConfig.DefaultKeyFile != config.DefaultKeyFile {
+		t.Errorf("DefaultKeyFile mismatch: got %q, want %q", loadedConfig.DefaultKeyFile, config.DefaultKeyFile)
+	}
+	
+	// Verify GistHistory
+	if len(loadedConfig.GistHistory) != len(config.GistHistory) {
+		t.Errorf("GistHistory length mismatch: got %d, want %d", len(loadedConfig.GistHistory), len(config.GistHistory))
+	}
+	
+	gist1, exists := loadedConfig.GistHistory["gist-1"]
+	if !exists {
+		t.Error("gist-1 should exist in loaded history")
+	} else {
+		if gist1.UsageCount != 10 {
+			t.Errorf("gist-1 UsageCount mismatch: got %d, want 10", gist1.UsageCount)
+		}
+		if len(gist1.Tags) != 2 {
+			t.Errorf("gist-1 Tags length mismatch: got %d, want 2", len(gist1.Tags))
+		}
+	}
+	
+	// Verify Projects
+	if len(loadedConfig.Projects) != len(config.Projects) {
+		t.Errorf("Projects length mismatch: got %d, want %d", len(loadedConfig.Projects), len(config.Projects))
+	}
+	
+	project1, exists := loadedConfig.Projects["project-1"]
+	if !exists {
+		t.Error("project-1 should exist in loaded projects")
+	} else {
+		if project1.Name != "Project One" {
+			t.Errorf("project-1 Name mismatch: got %q, want 'Project One'", project1.Name)
+		}
+		if len(project1.Environments) != 2 {
+			t.Errorf("project-1 Environments length mismatch: got %d, want 2", len(project1.Environments))
+		}
+	}
+}
