@@ -1,6 +1,6 @@
 module github.com/dexterity-inc/envi
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.24.2
 
@@ -12,9 +12,9 @@ require (
 	github.com/google/go-github/v37 v37.0.0
 	github.com/spf13/cobra v1.8.0
 	github.com/zalando/go-keyring v0.2.3
-	golang.org/x/crypto v0.36.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/oauth2 v0.27.0
-	golang.org/x/term v0.30.0
+	golang.org/x/term v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -37,9 +37,7 @@ require (
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )
